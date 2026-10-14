@@ -16,7 +16,7 @@ import {
 } from "./projects";
 import { buildMenuCommands, menuLabel } from "./menus";
 import type { MenuCmd, TreeNodeKind } from "./menus";
-import { partitionFor, wipeInstanceStorage } from "./sessions";
+import { clearInstanceCache, partitionFor, wipeInstanceStorage } from "./sessions";
 import {
   DEFAULT_SETTINGS,
   loadSettingsFile,
@@ -98,6 +98,22 @@ void app.whenReady().then(() => {
     saveStore(storePath, store);
     broadcastStoreChanged();
     return store;
+  });
+  // 清缓存：只清网络缓存、登录态保留；实例不存在直接抛错不动任何缓存。
+  ipcMain.handle("store:clear-cache", async (_event, instanceId: string) => {
+    const store = loadStore(storePath);
+    if (!store.instances.some((c) => c.id === instanceId)) {
+      throw new Error(`实例不存在: ${instanceId}`);
+    }
+    return clearInstanceCache(session.fromPartition(partitionFor(instanceId)), instanceId);
+  });
+  // 清全部站点数据：复用删实例的 wipe（掉登录），但保留实例元数据。
+  ipcMain.handle("store:clear-data", async (_event, instanceId: string) => {
+    const store = loadStore(storePath);
+    if (!store.instances.some((c) => c.id === instanceId)) {
+      throw new Error(`实例不存在: ${instanceId}`);
+    }
+    return wipeInstanceStorage(session.fromPartition(partitionFor(instanceId)), instanceId);
   });
   // 账号标注：纯元数据写；保存后若本次标注正处冲突，系统通知提醒（常驻红点由界面层画）。
   ipcMain.handle("store:set-label", (_event, instanceId: string, label: string) => {

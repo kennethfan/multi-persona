@@ -3,75 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <title>千岛</title>
-    <style>
-      * { box-sizing: border-box; }
-      html, body { margin: 0; height: 100%; font-family: -apple-system, "PingFang SC", sans-serif; }
-      #app { display: flex; height: 100%; }
-      #sidebar { width: 148px; flex: none; background: #f1f1f1; padding: 8px; display: flex;
-                 flex-direction: column; gap: 6px; overflow-y: auto; }
-      #sidebar h2 { font-size: 12px; color: #888; margin: 2px 4px; font-weight: 600; }
-      #side-foot { margin-top: auto; padding-top: 6px; }
-      #settings-btn { width: 100%; padding: 6px; }
-      #settings-wrap { flex: 1; display: flex; min-height: 0; background: #fff; }
-      #settings-wrap[hidden] { display: none; }
-      .settings { margin: auto; width: 340px; display: flex; flex-direction: column; gap: 12px;
-                 font-size: 13px; }
-      .settings h3 { margin: 0; font-size: 15px; }
-      .settings label { display: flex; flex-direction: column; gap: 4px; color: #333; }
-      .settings select { padding: 5px 8px; font-size: 13px; }
-      .settings .check { flex-direction: row; align-items: center; gap: 8px; }
-      .settings .row { display: flex; gap: 8px; justify-content: flex-end; }
-      .proj { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border-radius: 7px;
-              cursor: pointer; font-size: 13px; border: 1px solid transparent; }
-      .proj.active { background: #fff; border-color: #bbb; font-weight: 600; }
-      .proj .caret { font-size: 10px; color: #888; width: 12px; flex: none; }
-      .inst { display: flex; align-items: center; gap: 8px; padding: 6px 9px 6px 26px; border-radius: 7px;
-              cursor: pointer; font-size: 13px; border: 1px solid transparent; }
-      .inst.active { background: #fff; border-color: #bbb; font-weight: 600; }
-      .inst .lbl { color: #888; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .dup-dot { width: 8px; height: 8px; border-radius: 50%; background: #ef4444; flex: none; }
-      #overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: flex;
-                 align-items: center; justify-content: center; z-index: 100; }
-      #overlay[hidden] { display: none; }
-      .prompt { background: #fff; border-radius: 10px; padding: 16px; width: 300px;
-                display: flex; flex-direction: column; gap: 10px; }
-      .prompt h3 { margin: 0; font-size: 14px; }
-      .prompt input { padding: 6px 8px; font-size: 13px; }
-      .palette { display: flex; gap: 8px; flex-wrap: wrap; }
-      .swatch { width: 24px; height: 24px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; }
-      .swatch.sel { border-color: #333; }
-      .prompt .row { display: flex; gap: 8px; justify-content: flex-end; }
-      #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-      #toolbar { display: flex; gap: 8px; align-items: center; padding: 6px 10px; background: #f1f1f1; }
-      #tabbar { display: flex; gap: 6px; align-items: center; padding: 6px 10px; background: #e4e4e4; overflow-x: auto; }
-      .tab { display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 6px;
-             background: #fff; border: 1px solid #ccc; cursor: pointer; white-space: nowrap; font-size: 13px; }
-      .tab.active { border-color: #333; font-weight: 600; }
-      .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
-      .tab .close { border: none; background: none; cursor: pointer; color: #888; font-size: 13px; }
-      #views { flex: 1; display: flex; min-height: 0; position: relative; }
-      .pane { flex: 1; display: flex; flex-direction: column; min-width: 0; border-left: 1px solid #ccc; }
-      .pane:first-child { border-left: none; }
-      .addrbar { display: flex; gap: 6px; padding: 6px; background: #f7f7f7; }
-      .addrbar input { flex: 1; padding: 4px 8px; font-size: 13px; }
-      webview { flex: 1; }
-      button { font-size: 13px; cursor: pointer; }
-      #modal-layer { position: absolute; inset: 0; pointer-events: none; }
-      .modal { position: absolute; inset: 6% 10%; background: #fff; border: 1px solid #999;
-               border-radius: 10px; box-shadow: 0 12px 48px rgba(0,0,0,.35);
-               display: flex; flex-direction: column; pointer-events: auto; overflow: hidden; }
-      .modal-bar { display: flex; align-items: center; gap: 8px; padding: 6px 10px;
-                   background: #eee; font-size: 12px; color: #555; }
-      .modal-bar .url { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .modal-bar button { border: none; background: none; font-size: 15px; cursor: pointer; color: #555; }
-      .modal webview { flex: 1; }
-      .hint { margin: auto; color: #888; }
-      #toast-layer { position: fixed; right: 16px; bottom: 16px; display: flex;
-                    flex-direction: column; gap: 8px; z-index: 9999; }
-      .toast { background: rgba(30,30,30,.92); color: #fff; font-size: 13px;
-               padding: 8px 14px; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.3);
-               max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    </style>
+    <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <div id="app">

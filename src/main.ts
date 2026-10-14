@@ -8,6 +8,13 @@ import { createWindowOptions } from "./window-config";
 /** guest webContents id → 所属实例 id（渲染进程在 webview did-attach 后上报）。 */
 const webviewInstances = new Map<number, string>();
 
+/** 存储变更后通知所有窗口重拉：删实例/改标注都不再需要重启才生效。 */
+function broadcastStoreChanged(): void {
+  for (const w of BrowserWindow.getAllWindows()) {
+    w.webContents.send("mp:store-changed");
+  }
+}
+
 function createMainWindow(): BrowserWindow {
   const win = new BrowserWindow(createWindowOptions());
   // 站内全部新窗口请求在此拦截：一律 deny 原生窗口，转界面层开应用内标签/modal。
@@ -49,6 +56,7 @@ void app.whenReady().then(() => {
     store.instances = removeInstance(store.instances, instanceId); // 不存在直接抛错，不动任何存储
     await wipeInstanceStorage(session.fromPartition(partitionFor(instanceId)), instanceId);
     saveStore(storePath, store);
+    broadcastStoreChanged();
     return store;
   });
   // 账号标注：纯元数据写；同账号双实例检查由 duplicate-labels 统一算。
@@ -56,6 +64,7 @@ void app.whenReady().then(() => {
     const store = loadStore(storePath);
     store.instances = setInstanceLabel(store.instances, instanceId, label);
     saveStore(storePath, store);
+    broadcastStoreChanged();
     return store;
   });
   ipcMain.handle("store:duplicate-labels", () => findDuplicateLabels(loadStore(storePath).instances));

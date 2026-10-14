@@ -21,6 +21,8 @@ export interface MpAPI {
   setLabel(instanceId: string, label: string): Promise<Store>;
   /** 同一账号出现在 ≥2 实例即返回（全局语义，不分是否同项目）。 */
   duplicateLabels(): Promise<{ label: string; instanceIds: string[] }[]>;
+  /** 存储变更通知（删实例/改标注后），界面层重拉存储并重绘。 */
+  onStoreChanged(handler: () => void): void;
 }
 
 contextBridge.exposeInMainWorld("mpAPI", {
@@ -37,4 +39,7 @@ contextBridge.exposeInMainWorld("mpAPI", {
     ipcRenderer.invoke("store:set-label", instanceId, label),
   duplicateLabels: (): Promise<{ label: string; instanceIds: string[] }[]> =>
     ipcRenderer.invoke("store:duplicate-labels"),
+  onStoreChanged: (handler: () => void): void => {
+    ipcRenderer.on("mp:store-changed", () => handler());
+  },
 } satisfies MpAPI);

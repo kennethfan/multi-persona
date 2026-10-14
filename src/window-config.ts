@@ -8,7 +8,7 @@ export function createWindowOptions(): BrowserWindowConstructorOptions {
     height: 800,
     minWidth: 960,
     minHeight: 600,
-    title: "multi-persona",
+    title: "千岛",
     webPreferences: {
       // T1 占位页无需 Node 集成；后续票按最小权限重议。
       nodeIntegration: false,

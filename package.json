@@ -21,10 +21,13 @@
   },
   "build": {
     "appId": "com.kennethfan.multi-persona",
-    "productName": "multi-persona",
+    "productName": "千岛",
     "files": [
       "dist/**/*",
       "renderer/**/*",
+      "build/icon.icns",
+      "build/icon.ico",
+      "build/icon.png",
       "package.json"
     ],
     "directories": {
@@ -32,10 +35,16 @@
     },
     "mac": {
       "target": ["dmg"],
-      "category": "public.app-category.utilities"
+      "category": "public.app-category.utilities",
+      "icon": "build/icon.icns"
     },
     "win": {
-      "target": ["nsis"]
+      "target": ["nsis"],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
     }
   }
 }

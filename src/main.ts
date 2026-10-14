@@ -1,7 +1,8 @@
 import { app, BrowserWindow, ipcMain, session } from "electron";
 import path from "node:path";
 import { loadStore, migrateLegacyStore, resolveStorePath, saveStore } from "./project-store";
-import { partitionFor } from "./sessions";
+import { removeInstance } from "./projects";
+import { partitionFor, wipeInstanceStorage } from "./sessions";
 import { createWindowOptions } from "./window-config";
 
 /** guest webContents id → 所属实例 id（渲染进程在 webview did-attach 后上报）。 */
@@ -40,6 +41,15 @@ void app.whenReady().then(() => {
   ipcMain.handle("store:list", () => loadStore(storePath));
   ipcMain.on("mp:webview-register", (_event, webContentsId: number, instanceId: string) => {
     webviewInstances.set(webContentsId, instanceId);
+  });
+  // 删实例：先清分区存储（含登录态），再删元数据落盘。
+  // 顺序不能反——wipe 失败时元数据还在、可重试；反过来会留下清不掉的孤儿会话。
+  ipcMain.handle("store:remove-instance", async (_event, instanceId: string) => {
+    const store = loadStore(storePath);
+    store.instances = removeInstance(store.instances, instanceId); // 不存在直接抛错，不动任何存储
+    await wipeInstanceStorage(session.fromPartition(partitionFor(instanceId)), instanceId);
+    saveStore(storePath, store);
+    return store;
   });
 
   createMainWindow();

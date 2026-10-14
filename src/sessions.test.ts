@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { instanceIdFromPartition, partitionFor } from "./sessions";
+import { describe, expect, it, vi } from "vitest";
+import {
+  instanceIdFromPartition,
+  partitionFor,
+  wipeInstanceStorage,
+} from "./sessions";
 
 describe("实例↔会话分区映射", () => {
   it("同一实例映射到同一持久化分区", () => {
@@ -19,5 +23,20 @@ describe("实例↔会话分区映射", () => {
     expect(instanceIdFromPartition(partitionFor("default-1"))).toBe("default-1");
     expect(instanceIdFromPartition("persist:other")).toBeUndefined();
     expect(instanceIdFromPartition("")).toBeUndefined();
+  });
+});
+
+describe("删实例清会话", () => {
+  it("wipe 调 clearStorageData 并返回被清分区", async () => {
+    const clearStorageData = vi.fn().mockResolvedValue(undefined);
+    const partition = await wipeInstanceStorage({ clearStorageData }, "default-1");
+    expect(clearStorageData).toHaveBeenCalledTimes(1);
+    expect(partition).toBe(partitionFor("default-1"));
+  });
+
+  it("空 id 抛错且不动任何存储", async () => {
+    const clearStorageData = vi.fn().mockResolvedValue(undefined);
+    await expect(wipeInstanceStorage({ clearStorageData }, "")).rejects.toThrow();
+    expect(clearStorageData).not.toHaveBeenCalled();
   });
 });

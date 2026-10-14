@@ -22,3 +22,25 @@ export function instanceIdFromPartition(partition: string): string | undefined {
   const id = partition.slice(PARTITION_PREFIX.length);
   return id ? id : undefined;
 }
+
+/**
+ * Electron.Session 用到的最小形状。
+ * 传参而非直接 import Electron——Vitest 里没有 Electron 运行时，
+ * 测试传 mock 即可；主进程传真正的 session。
+ */
+export interface ClearableStorage {
+  clearStorageData(options?: Record<string, unknown>): Promise<void>;
+}
+
+/**
+ * 清空某实例分区的全部存储（含登录态）。
+ * 返回被清的分区名；空 id 直接抛错且不动任何存储。
+ */
+export async function wipeInstanceStorage(
+  ses: ClearableStorage,
+  instanceId: string,
+): Promise<string> {
+  const partition = partitionFor(instanceId);
+  await ses.clearStorageData();
+  return partition;
+}

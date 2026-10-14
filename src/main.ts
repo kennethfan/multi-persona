@@ -1,4 +1,4 @@
-import { app, BrowserWindow, session } from "electron";
+import { app, BrowserWindow, ipcMain, session } from "electron";
 import path from "node:path";
 import { loadContainers, resolveStorePath, saveContainers } from "./container-store";
 import { partitionFor } from "./sessions";
@@ -19,6 +19,9 @@ void app.whenReady().then(() => {
   for (const c of containers) {
     session.fromPartition(partitionFor(c.id));
   }
+
+  // T4：renderer 只读容器列表。
+  ipcMain.handle("containers:list", () => loadContainers(storePath));
 
   createMainWindow();
 

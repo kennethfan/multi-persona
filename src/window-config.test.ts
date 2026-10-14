@@ -8,5 +8,7 @@ describe("createWindowOptions", () => {
     expect(opts.height).toBe(800);
     expect(opts.webPreferences?.nodeIntegration).toBe(false);
     expect(opts.webPreferences?.contextIsolation).toBe(true);
+    expect(opts.webPreferences?.webviewTag).toBe(true);
+    expect(opts.webPreferences?.preload).toMatch(/preload\.js$/);
   });
 });

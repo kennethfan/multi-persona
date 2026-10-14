@@ -3,9 +3,37 @@
   <head>
     <meta charset="utf-8" />
     <title>multi-persona</title>
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; font-family: -apple-system, "PingFang SC", sans-serif; }
+      #app { display: flex; flex-direction: column; height: 100%; }
+      #toolbar { display: flex; gap: 8px; align-items: center; padding: 6px 10px; background: #f1f1f1; }
+      #tabbar { display: flex; gap: 6px; align-items: center; padding: 6px 10px; background: #e4e4e4; overflow-x: auto; }
+      .tab { display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 6px;
+             background: #fff; border: 1px solid #ccc; cursor: pointer; white-space: nowrap; font-size: 13px; }
+      .tab.active { border-color: #333; font-weight: 600; }
+      .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+      .tab .close { border: none; background: none; cursor: pointer; color: #888; font-size: 13px; }
+      #views { flex: 1; display: flex; min-height: 0; }
+      .pane { flex: 1; display: flex; flex-direction: column; min-width: 0; border-left: 1px solid #ccc; }
+      .pane:first-child { border-left: none; }
+      .addrbar { display: flex; gap: 6px; padding: 6px; background: #f7f7f7; }
+      .addrbar input { flex: 1; padding: 4px 8px; font-size: 13px; }
+      webview { flex: 1; }
+      button { font-size: 13px; cursor: pointer; }
+      select { font-size: 13px; }
+    </style>
   </head>
   <body>
-    <h1>multi-persona · T1 骨架</h1>
-    <p>主窗口运行正常。容器 / 会话 / 标签页能力在后续票中接入。</p>
+    <div id="app">
+      <div id="toolbar">
+        <label>当前容器 <select id="container-select"></select></label>
+        <button id="new-tab">＋ 新标签</button>
+        <button id="split-toggle">分屏：关</button>
+      </div>
+      <div id="tabbar"></div>
+      <div id="views"></div>
+    </div>
+    <script src="./app.js"></script>
   </body>
 </html>

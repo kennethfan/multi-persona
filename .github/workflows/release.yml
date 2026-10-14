@@ -36,6 +36,7 @@ jobs:
       - run: npm ci
       - name: Sync version from tag
         if: github.ref_type == 'tag'
+        shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           echo "tag version: $VERSION"

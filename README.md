@@ -1,4 +1,4 @@
-# multi-persona
+# 千岛
 
 同一网站多登录身份同时在线、互不串号的桌面应用（Electron，macOS + Windows）。
 

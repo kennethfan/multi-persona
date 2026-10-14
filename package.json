@@ -1,0 +1,33 @@
+{
+  "name": "multi-persona",
+  "version": "0.1.0",
+  "description": "多账号会话隔离桌面应用（T1：应用骨架）",
+  "main": "dist/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "dist": "npm run build && electron-builder --mac dmg"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "electron": "^38.8.6",
+    "electron-builder": "^26.0.0",
+    "typescript": "^7.0.0",
+    "vitest": "^5.0.0"
+  },
+  "build": {
+    "appId": "com.kennethfan.multi-persona",
+    "productName": "multi-persona",
+    "files": [
+      "dist/**/*",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "target": ["dmg"],
+      "category": "public.app-category.utilities"
+    }
+  }
+}

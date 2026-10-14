@@ -8,7 +8,8 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "dist": "npm run build && electron-builder --mac dmg"
+    "dist": "npm run build && electron-builder --mac dmg",
+    "dist:win": "npm run build && electron-builder --win nsis"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
@@ -25,9 +26,15 @@
       "renderer/**/*",
       "package.json"
     ],
+    "directories": {
+      "output": "release"
+    },
     "mac": {
       "target": ["dmg"],
       "category": "public.app-category.utilities"
+    },
+    "win": {
+      "target": ["nsis"]
     }
   }
 }

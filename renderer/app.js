@@ -370,6 +370,14 @@
     promise.then(function (s) { if (s) applyStore(s); });
   }
 
+  function reloadInstanceTabs(instanceId) {
+    tabs.forEach(function (t) {
+      if (t.instanceId !== instanceId) return;
+      var p = panes[t.id];
+      if (p && p.view) { try { p.view.reload(); } catch (e) { /* 忽略 */ } }
+    });
+  }
+
   window.mpAPI.onMenuCommand(function (m) {
     if (m.cmd === "new-project") {
       promptDialog({ title: "新建项目", placeholder: "项目名", withPalette: true })
@@ -394,6 +402,18 @@
     } else if (m.cmd === "set-label") {
       promptDialog({ title: "标注账号", initial: node.label || "", placeholder: "如：Gmail 的 a@gmail.com" })
         .then(function (r) { if (r) afterMutation(window.mpAPI.setLabel(m.id, r.value)); });
+    } else if (m.cmd === "clear-cache" && m.kind === "instance") {
+      window.mpAPI.confirm({
+        message: "清除实例“" + node.name + "”的缓存？",
+        detail: "仅清除网络缓存，登录态保留；清除后该实例标签页自动重载。",
+        okLabel: "清除",
+      }).then(function (yes) { if (yes) window.mpAPI.clearCache(m.id).then(function () { reloadInstanceTabs(m.id); }); });
+    } else if (m.cmd === "clear-data" && m.kind === "instance") {
+      window.mpAPI.confirm({
+        message: "清除实例“" + node.name + "”的全部站点数据？",
+        detail: "该实例全部站点数据将被清除，所有登录态退出，不可恢复；清除后标签页自动重载到登录页。",
+        okLabel: "清除全部",
+      }).then(function (yes) { if (yes) window.mpAPI.clearData(m.id).then(function () { reloadInstanceTabs(m.id); }); });
     } else if (m.cmd === "delete" && m.kind === "instance") {
       window.mpAPI.confirm({
         message: "删除实例“" + node.name + "”？",

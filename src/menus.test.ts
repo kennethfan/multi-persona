@@ -6,12 +6,14 @@ describe("buildMenuCommands", () => {
     expect(buildMenuCommands("project")).toEqual(["new-instance", "rename", "recolor", "delete"]);
   });
 
-  it("实例节点：新建/改名/改色/标注/删除", () => {
+  it("实例节点：新建/改名/改色/标注/清缓存/清数据/删除", () => {
     expect(buildMenuCommands("instance")).toEqual([
       "new-instance-here",
       "rename",
       "recolor",
       "set-label",
+      "clear-cache",
+      "clear-data",
       "delete",
     ]);
   });

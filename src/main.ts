@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, session } from "electron";
 import path from "node:path";
 import { loadStore, migrateLegacyStore, resolveStorePath, saveStore } from "./project-store";
-import { removeInstance } from "./projects";
+import { findDuplicateLabels, removeInstance, setInstanceLabel } from "./projects";
 import { partitionFor, wipeInstanceStorage } from "./sessions";
 import { createWindowOptions } from "./window-config";
 
@@ -51,6 +51,14 @@ void app.whenReady().then(() => {
     saveStore(storePath, store);
     return store;
   });
+  // 账号标注：纯元数据写；同账号双实例检查由 duplicate-labels 统一算。
+  ipcMain.handle("store:set-label", (_event, instanceId: string, label: string) => {
+    const store = loadStore(storePath);
+    store.instances = setInstanceLabel(store.instances, instanceId, label);
+    saveStore(storePath, store);
+    return store;
+  });
+  ipcMain.handle("store:duplicate-labels", () => findDuplicateLabels(loadStore(storePath).instances));
 
   createMainWindow();
 

@@ -9,6 +9,7 @@ import {
   createDefaultProjects,
   getInstance,
   getProject,
+  findDuplicateLabels,
   instancesOfProject,
   recolorInstance,
   recolorProject,
@@ -17,6 +18,7 @@ import {
   removeProjectCascade,
   renameInstance,
   renameProject,
+  setInstanceLabel,
   wrapProjects,
 } from "./projects";
 import {
@@ -115,6 +117,42 @@ describe("实例 CRUD", () => {
     renameInstance(list, "default-1-i1", "x");
     removeInstance(list, "default-1-i1");
     expect(JSON.stringify(list)).toBe(snapshot);
+  });
+});
+
+describe("账号标注与双实例提醒", () => {
+  it("设标注 / 改标注 / 清标注（空字串）；不存在的 id 抛错", () => {
+    let list = createDefaultInstances(createDefaultProjects());
+    list = setInstanceLabel(list, "default-1-i1", "Gmail 的 a@gmail.com");
+    expect(getInstance(list, "default-1-i1")?.label).toBe("Gmail 的 a@gmail.com");
+
+    list = setInstanceLabel(list, "default-1-i1", "");
+    expect(getInstance(list, "default-1-i1")?.label).toBe("");
+
+    expect(() => setInstanceLabel(list, "nope", "x")).toThrow();
+  });
+
+  it("同一账号进两个实例即报，不分是否同项目", () => {
+    let list = createDefaultInstances(createDefaultProjects());
+    list = setInstanceLabel(list, "default-1-i1", "Gmail 的 a@gmail.com");
+    list = setInstanceLabel(list, "default-2-i1", "Gmail 的 a@gmail.com");
+    const dups = findDuplicateLabels(list);
+    expect(dups).toHaveLength(1);
+    expect(dups[0].label).toBe("Gmail 的 a@gmail.com");
+    expect(new Set(dups[0].instanceIds)).toEqual(new Set(["default-1-i1", "default-2-i1"]));
+  });
+
+  it("不同账号 / 空白标注不报；改掉后警报消除", () => {
+    let list = createDefaultInstances(createDefaultProjects());
+    list = setInstanceLabel(list, "default-1-i1", "a@gmail.com");
+    list = setInstanceLabel(list, "default-2-i1", "b@gmail.com");
+    list = setInstanceLabel(list, "default-3-i1", "   ");
+    expect(findDuplicateLabels(list)).toHaveLength(0);
+
+    list = setInstanceLabel(list, "default-2-i1", "a@gmail.com");
+    expect(findDuplicateLabels(list)).toHaveLength(1);
+    list = setInstanceLabel(list, "default-2-i1", "b@gmail.com");
+    expect(findDuplicateLabels(list)).toHaveLength(0);
   });
 });
 

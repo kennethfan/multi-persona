@@ -18,6 +18,8 @@ export interface Instance {
   name: string;
   /** 标识颜色，CSS 颜色字符串。 */
   color: string;
+  /** 手工标注的站点账号（如“Gmail 的 a@gmail.com”）；缺失或空白=未标注。 */
+  label?: string;
 }
 
 /** 首次启动预置的 5 个空项目：名字与颜色各不相同。 */
@@ -116,6 +118,36 @@ export function recolorInstance(list: Instance[], id: string, color: string): In
   });
   if (!found) throw new Error(`实例不存在: ${id}`);
   return next;
+}
+
+/** 手工标注实例承载的站点账号；id 不存在时抛错。空字串=清除标注。 */
+export function setInstanceLabel(list: Instance[], id: string, label: string): Instance[] {
+  let found = false;
+  const next = list.map((c) => {
+    if (c.id !== id) return c;
+    found = true;
+    return { ...c, label };
+  });
+  if (!found) throw new Error(`实例不存在: ${id}`);
+  return next;
+}
+
+/**
+ * 同一站点账号出现在 ≥2 实例即报（ADR-0007 全局语义，不分是否同项目）。
+ * 空白标注视为未标注，不参与比较；label 原样比对，不做大小写归一。
+ */
+export function findDuplicateLabels(list: Instance[]): { label: string; instanceIds: string[] }[] {
+  const groups = new Map<string, string[]>();
+  for (const inst of list) {
+    const label = (inst.label ?? "").trim();
+    if (!label) continue;
+    const ids = groups.get(label);
+    if (ids) ids.push(inst.id);
+    else groups.set(label, [inst.id]);
+  }
+  return [...groups.entries()]
+    .filter(([, ids]) => ids.length >= 2)
+    .map(([label, instanceIds]) => ({ label, instanceIds }));
 }
 
 /** 删除实例元数据（幂等）。分区清除在 T5 做，二次确认在界面层做。 */

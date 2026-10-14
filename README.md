@@ -11,7 +11,7 @@
 | `npm run build` | TypeScript 编译到 dist/ |
 | `npm run typecheck` | 仅类型检查          |
 | `npm test`      | vitest 单测             |
-| `npm run dist`  | 打 macOS dmg（release/）|
+| `npm run dist`  | 打 macOS dmg（dist/）  |
 
 ## 说明
 

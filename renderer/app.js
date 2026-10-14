@@ -591,6 +591,24 @@
     refreshDuplicates();
   }
 
+  var toastTimer = null;
+  function showToast(text) {
+    var layer = document.getElementById("toast-layer");
+    if (!layer) {
+      layer = document.createElement("div");
+      layer.id = "toast-layer";
+      document.body.appendChild(layer);
+    }
+    var node = document.createElement("div");
+    node.className = "toast";
+    node.textContent = text;
+    layer.appendChild(node);
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { layer.innerHTML = ""; toastTimer = null; }, 2000);
+  }
+
+  window.mpAPI.onToast(showToast);
+
   window.mpAPI.onStoreChanged(function () {
   window.mpAPI.listStore().then(applyStore);
   window.mpAPI.getSettings().then(function (s) { settings = s; });

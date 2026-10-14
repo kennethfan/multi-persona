@@ -47,6 +47,12 @@ function broadcastStoreChanged(): void {
   }
 }
 
+function broadcastToast(text: string): void {
+  for (const w of BrowserWindow.getAllWindows()) {
+    w.webContents.send("mp:toast", text);
+  }
+}
+
 /**
  * 实例分区下载落盘：will-download 直接指定保存路径，不弹另存为框。
  * 设置/存储每次现读——改完设置后下一次下载即生效；读存储失败按跟随全局处理。
@@ -78,6 +84,9 @@ function handleWillDownload(
     }).show();
   }
   item.setSavePath(savePath);
+  item.on("done", (_e, state) => {
+    if (state === "completed") broadcastToast(`已下载：${item.getFilename()}`);
+  });
 }
 
 /** 给实例专属分区挂下载拦截（含 <webview> 同分区下载）。 */

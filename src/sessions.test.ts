@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  clearInstanceCache,
   instanceIdFromPartition,
   partitionFor,
   wipeInstanceStorage,
@@ -38,5 +39,20 @@ describe("删实例清会话", () => {
     const clearStorageData = vi.fn().mockResolvedValue(undefined);
     await expect(wipeInstanceStorage({ clearStorageData }, "")).rejects.toThrow();
     expect(clearStorageData).not.toHaveBeenCalled();
+  });
+});
+
+describe("实例清缓存", () => {
+  it("只调 clearCache、不碰 clearStorageData（登录态保留）", async () => {
+    const clearCache = vi.fn().mockResolvedValue(undefined);
+    const partition = await clearInstanceCache({ clearCache }, "default-1");
+    expect(clearCache).toHaveBeenCalledTimes(1);
+    expect(partition).toBe(partitionFor("default-1"));
+  });
+
+  it("空 id 抛错且不动任何缓存", async () => {
+    const clearCache = vi.fn().mockResolvedValue(undefined);
+    await expect(clearInstanceCache({ clearCache }, "")).rejects.toThrow();
+    expect(clearCache).not.toHaveBeenCalled();
   });
 });

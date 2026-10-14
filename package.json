@@ -5,6 +5,7 @@
   "main": "dist/main.js",
   "scripts": {
     "start": "electron .",
+    "dev": "npm run build && electron .",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

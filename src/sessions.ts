@@ -33,6 +33,27 @@ export interface ClearableStorage {
 }
 
 /**
+ * Electron.Session 用到的最小形状（仅清网络缓存）。
+ * 与 ClearableStorage 分开——clearCache 不碰 cookie/storage，登录态保留。
+ */
+export interface CacheClearable {
+  clearCache(): Promise<void>;
+}
+
+/**
+ * 只清某实例分区的网络缓存，登录态保留。
+ * 返回被清的分区名；空 id 直接抛错且不动任何存储。
+ */
+export async function clearInstanceCache(
+  ses: CacheClearable,
+  instanceId: string,
+): Promise<string> {
+  const partition = partitionFor(instanceId);
+  await ses.clearCache();
+  return partition;
+}
+
+/**
  * 清空某实例分区的全部存储（含登录态）。
  * 返回被清的分区名；空 id 直接抛错且不动任何存储。
  */

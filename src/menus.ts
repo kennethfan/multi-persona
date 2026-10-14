@@ -14,13 +14,15 @@ export type MenuCmd =
   | "rename"
   | "recolor"
   | "set-label"
+  | "clear-cache"
+  | "clear-data"
   | "delete";
 
 /** 某类节点右键应出现哪些命令（顺序即展示顺序）。 */
 export function buildMenuCommands(kind: TreeNodeKind): MenuCmd[] {
   if (kind === "sidebar") return ["new-project"];
   if (kind === "project") return ["new-instance", "rename", "recolor", "delete"];
-  return ["new-instance-here", "rename", "recolor", "set-label", "delete"];
+  return ["new-instance-here", "rename", "recolor", "set-label", "clear-cache", "clear-data", "delete"];
 }
 
 /** 命令展示文案（delete 按节点类型区分，提醒级联/清会话后果）。 */
@@ -38,6 +40,10 @@ export function menuLabel(cmd: MenuCmd, kind: TreeNodeKind): string {
       return "更改颜色";
     case "set-label":
       return "标注账号";
+    case "clear-cache":
+      return "清除缓存";
+    case "clear-data":
+      return "清除全部站点数据";
     case "delete":
       return kind === "project" ? "删除项目（含其下全部实例）" : "删除实例（含其会话）";
   }

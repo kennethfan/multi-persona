@@ -16,7 +16,15 @@ import {
 } from "./projects";
 import { buildMenuCommands, menuLabel } from "./menus";
 import type { MenuCmd, TreeNodeKind } from "./menus";
-import { partitionFor, wipeInstanceStorage } from "./sessions";
+import { clearInstanceCache, partitionFor, wipeInstanceStorage } from "./sessions";
+import {
+  DEFAULT_SETTINGS,
+  loadSettingsFile,
+  resolveSettingsPath,
+  saveSettingsFile,
+  withDefaults,
+} from "./settings";
+import type { Settings } from "./settings";
 import { createWindowOptions } from "./window-config";
 
 /** guest webContents id → 所属实例 id（渲染进程在 webview did-attach 后上报）。 */
@@ -61,9 +69,20 @@ void app.whenReady().then(() => {
   const storePath = resolveStorePath(userData);
   const store = loadStore(storePath);
   saveStore(storePath, store); // 首次启动时落盘默认存储
+  const settingsPath = resolveSettingsPath(userData);
+  let settings: Settings = loadSettingsFile(settingsPath);
+  saveSettingsFile(settingsPath, settings);
   for (const inst of store.instances) {
     session.fromPartition(partitionFor(inst.id));
   }
+
+  // 应用级设置：读内存值，写时合并回填后落盘（界面层草稿只在点保存后才调 set）。
+  ipcMain.handle("settings:get", () => settings);
+  ipcMain.handle("settings:set", (_event, patch: Partial<Settings>) => {
+    settings = withDefaults({ ...settings, ...patch });
+    saveSettingsFile(settingsPath, settings);
+    return settings;
+  });
 
   // renderer 只读存储；上报 webview 与实例的配对。
   ipcMain.handle("store:list", () => loadStore(storePath));
@@ -80,6 +99,22 @@ void app.whenReady().then(() => {
     broadcastStoreChanged();
     return store;
   });
+  // 清缓存：只清网络缓存、登录态保留；实例不存在直接抛错不动任何缓存。
+  ipcMain.handle("store:clear-cache", async (_event, instanceId: string) => {
+    const store = loadStore(storePath);
+    if (!store.instances.some((c) => c.id === instanceId)) {
+      throw new Error(`实例不存在: ${instanceId}`);
+    }
+    return clearInstanceCache(session.fromPartition(partitionFor(instanceId)), instanceId);
+  });
+  // 清全部站点数据：复用删实例的 wipe（掉登录），但保留实例元数据。
+  ipcMain.handle("store:clear-data", async (_event, instanceId: string) => {
+    const store = loadStore(storePath);
+    if (!store.instances.some((c) => c.id === instanceId)) {
+      throw new Error(`实例不存在: ${instanceId}`);
+    }
+    return wipeInstanceStorage(session.fromPartition(partitionFor(instanceId)), instanceId);
+  });
   // 账号标注：纯元数据写；保存后若本次标注正处冲突，系统通知提醒（常驻红点由界面层画）。
   ipcMain.handle("store:set-label", (_event, instanceId: string, label: string) => {
     const store = loadStore(storePath);
@@ -87,7 +122,7 @@ void app.whenReady().then(() => {
     saveStore(storePath, store);
     broadcastStoreChanged();
     const trimmed = label.trim();
-    if (trimmed) {
+    if (trimmed && settings.conflictNotify) {
       const dup = findDuplicateLabels(store.instances).find((d) => d.label === trimmed);
       if (dup) {
         new Notification({

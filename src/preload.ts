@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { Store } from "./project-store";
+import type { Settings } from "./settings";
 
 /** 站内新窗口请求（主进程经 setWindowOpenHandler 拦截后转发）。 */
 export interface WindowOpenRequest {
@@ -17,6 +18,10 @@ export interface MpAPI {
   onWindowOpen(handler: (req: WindowOpenRequest) => void): void;
   /** 删实例：主进程先清该实例分区存储再删元数据。界面层必须先二次确认再调。 */
   removeInstance(instanceId: string): Promise<Store>;
+  /** 只清某实例网络缓存（登录态保留）。返回被清分区名。 */
+  clearCache(instanceId: string): Promise<string>;
+  /** 清某实例全部站点数据（掉登录，保留元数据）。返回被清分区名。 */
+  clearData(instanceId: string): Promise<string>;
   /** 手工标注实例的站点账号（空字串=清除标注）。 */
   setLabel(instanceId: string, label: string): Promise<Store>;
   /** 同一账号出现在 ≥2 实例即返回（全局语义，不分是否同项目）。 */
@@ -39,6 +44,10 @@ export interface MpAPI {
   showContextMenu(kind: "project" | "instance" | "sidebar", id: string, x: number, y: number): void;
   /** 菜单命令回传。 */
   onMenuCommand(handler: (cmd: { cmd: string; kind: "project" | "instance" | "sidebar"; id: string }) => void): void;
+  /** 读应用级设置（内存值）。 */
+  getSettings(): Promise<Settings>;
+  /** 写应用级设置（合并回填后落盘，返回生效值）。 */
+  setSettings(patch: Partial<Settings>): Promise<Settings>;
 }
 
 contextBridge.exposeInMainWorld("mpAPI", {
@@ -51,6 +60,10 @@ contextBridge.exposeInMainWorld("mpAPI", {
   },
   removeInstance: (instanceId: string): Promise<Store> =>
     ipcRenderer.invoke("store:remove-instance", instanceId),
+  clearCache: (instanceId: string): Promise<string> =>
+    ipcRenderer.invoke("store:clear-cache", instanceId),
+  clearData: (instanceId: string): Promise<string> =>
+    ipcRenderer.invoke("store:clear-data", instanceId),
   setLabel: (instanceId: string, label: string): Promise<Store> =>
     ipcRenderer.invoke("store:set-label", instanceId, label),
   duplicateLabels: (): Promise<{ label: string; instanceIds: string[] }[]> =>
@@ -78,4 +91,7 @@ contextBridge.exposeInMainWorld("mpAPI", {
   ): void => {
     ipcRenderer.on("mp:menu-cmd", (_e, cmd) => handler(cmd));
   },
+  getSettings: (): Promise<Settings> => ipcRenderer.invoke("settings:get"),
+  setSettings: (patch: Partial<Settings>): Promise<Settings> =>
+    ipcRenderer.invoke("settings:set", patch),
 } satisfies MpAPI);

@@ -10,6 +10,17 @@
       #sidebar { width: 148px; flex: none; background: #f1f1f1; padding: 8px; display: flex;
                  flex-direction: column; gap: 6px; overflow-y: auto; }
       #sidebar h2 { font-size: 12px; color: #888; margin: 2px 4px; font-weight: 600; }
+      #side-foot { margin-top: auto; padding-top: 6px; }
+      #settings-btn { width: 100%; padding: 6px; }
+      #settings-wrap { flex: 1; display: flex; min-height: 0; background: #fff; }
+      #settings-wrap[hidden] { display: none; }
+      .settings { margin: auto; width: 340px; display: flex; flex-direction: column; gap: 12px;
+                 font-size: 13px; }
+      .settings h3 { margin: 0; font-size: 15px; }
+      .settings label { display: flex; flex-direction: column; gap: 4px; color: #333; }
+      .settings select { padding: 5px 8px; font-size: 13px; }
+      .settings .check { flex-direction: row; align-items: center; gap: 8px; }
+      .settings .row { display: flex; gap: 8px; justify-content: flex-end; }
       .proj { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border-radius: 7px;
               cursor: pointer; font-size: 13px; border: 1px solid transparent; }
       .proj.active { background: #fff; border-color: #bbb; font-weight: 600; }
@@ -59,13 +70,14 @@
   </head>
   <body>
     <div id="app">
-      <div id="sidebar"><h2>项目</h2><div id="proj-list"></div></div>
+      <div id="sidebar"><h2>项目</h2><div id="proj-list"></div><div id="side-foot"><button id="settings-btn">⚙ 设置</button></div></div>
       <div id="main">
         <div id="toolbar">
           <button id="new-tab">＋ 新标签</button>
           <button id="split-toggle">分屏：关</button>
         </div>
         <div id="tabbar"></div>
+        <div id="settings-wrap" hidden></div>
         <div id="views">
           <div id="modal-layer"></div>
         </div>

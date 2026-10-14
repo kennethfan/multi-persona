@@ -13,7 +13,7 @@ export function createWindowOptions(): BrowserWindowConstructorOptions {
       // T1 占位页无需 Node 集成；后续票按最小权限重议。
       nodeIntegration: false,
       contextIsolation: true,
-      // T4：renderer 经 preload 只读容器列表；标签页内容用 webview 跑。
+      // T4：renderer 经 preload 调用宿主能力；标签页内容用 webview 跑。
       preload: path.join(__dirname, "preload.js"),
       webviewTag: true,
     },

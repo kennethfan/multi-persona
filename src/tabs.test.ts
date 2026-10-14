@@ -6,28 +6,28 @@ import {
   createInitialState,
   openTab,
   setSplit,
-  switchContainer,
+  switchInstance,
 } from "./tabs";
 
 describe("标签页状态", () => {
-  it("新标签默认归属当前容器", () => {
-    let s = createInitialState("default-1");
+  it("新标签默认归属当前实例", () => {
+    let s = createInitialState("default-1-i1");
     s = openTab(s, "t-1");
-    expect(s.tabs[0].containerId).toBe("default-1");
+    expect(s.tabs[0].instanceId).toBe("default-1-i1");
     expect(s.activeTabId).toBe("t-1");
   });
 
-  it("切换当前容器只影响后续新标签", () => {
-    let s = createInitialState("default-1");
+  it("切换当前实例只影响后续新标签", () => {
+    let s = createInitialState("default-1-i1");
     s = openTab(s, "t-1");
-    s = switchContainer(s, "default-2");
+    s = switchInstance(s, "default-1-i2");
     s = openTab(s, "t-2");
-    expect(s.tabs[0].containerId).toBe("default-1");
-    expect(s.tabs[1].containerId).toBe("default-2");
+    expect(s.tabs[0].instanceId).toBe("default-1-i1");
+    expect(s.tabs[1].instanceId).toBe("default-1-i2");
   });
 
   it("激活不存在的标签抛错；关闭活动标签后激活最后一个", () => {
-    let s = createInitialState("default-1");
+    let s = createInitialState("default-1-i1");
     s = openTab(s, "t-1");
     s = openTab(s, "t-2");
     expect(() => activateTab(s, "nope")).toThrow();
@@ -37,15 +37,28 @@ describe("标签页状态", () => {
     expect(s.activeTabId).toBeNull();
   });
 
-  it("分屏两格可绑定不同容器，可退出", () => {
-    let s = createInitialState("default-1");
-    s = setSplit(s, "default-1", "default-2");
-    expect(s.split).toEqual({ leftContainerId: "default-1", rightContainerId: "default-2" });
+  it("分屏绑定两个已存在的标签（可跨实例），可退出；引用不存在的标签抛错", () => {
+    let s = createInitialState("default-1-i1");
+    s = openTab(s, "t-1");
+    s = switchInstance(s, "default-2-i1");
+    s = openTab(s, "t-2");
+    s = setSplit(s, "t-1", "t-2");
+    expect(s.split).toEqual({ leftTabId: "t-1", rightTabId: "t-2" });
+    expect(() => setSplit(s, "t-1", "nope")).toThrow();
     s = clearSplit(s);
     expect(s.split).toBeNull();
   });
 
-  it("空容器 id 建初始状态抛错", () => {
+  it("关闭分屏中的标签则一并退出分屏", () => {
+    let s = createInitialState("default-1-i1");
+    s = openTab(s, "t-1");
+    s = openTab(s, "t-2");
+    s = setSplit(s, "t-1", "t-2");
+    s = closeTab(s, "t-1");
+    expect(s.split).toBeNull();
+  });
+
+  it("空实例 id 建初始状态抛错", () => {
     expect(() => createInitialState("")).toThrow();
   });
 });

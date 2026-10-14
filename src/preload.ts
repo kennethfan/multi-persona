@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { Store } from "./project-store";
+import type { Settings } from "./settings";
 
 /** 站内新窗口请求（主进程经 setWindowOpenHandler 拦截后转发）。 */
 export interface WindowOpenRequest {
@@ -39,6 +40,10 @@ export interface MpAPI {
   showContextMenu(kind: "project" | "instance" | "sidebar", id: string, x: number, y: number): void;
   /** 菜单命令回传。 */
   onMenuCommand(handler: (cmd: { cmd: string; kind: "project" | "instance" | "sidebar"; id: string }) => void): void;
+  /** 读应用级设置（内存值）。 */
+  getSettings(): Promise<Settings>;
+  /** 写应用级设置（合并回填后落盘，返回生效值）。 */
+  setSettings(patch: Partial<Settings>): Promise<Settings>;
 }
 
 contextBridge.exposeInMainWorld("mpAPI", {
@@ -78,4 +83,7 @@ contextBridge.exposeInMainWorld("mpAPI", {
   ): void => {
     ipcRenderer.on("mp:menu-cmd", (_e, cmd) => handler(cmd));
   },
+  getSettings: (): Promise<Settings> => ipcRenderer.invoke("settings:get"),
+  setSettings: (patch: Partial<Settings>): Promise<Settings> =>
+    ipcRenderer.invoke("settings:set", patch),
 } satisfies MpAPI);

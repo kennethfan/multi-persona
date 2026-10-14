@@ -17,6 +17,14 @@ import {
 import { buildMenuCommands, menuLabel } from "./menus";
 import type { MenuCmd, TreeNodeKind } from "./menus";
 import { partitionFor, wipeInstanceStorage } from "./sessions";
+import {
+  DEFAULT_SETTINGS,
+  loadSettingsFile,
+  resolveSettingsPath,
+  saveSettingsFile,
+  withDefaults,
+} from "./settings";
+import type { Settings } from "./settings";
 import { createWindowOptions } from "./window-config";
 
 /** guest webContents id → 所属实例 id（渲染进程在 webview did-attach 后上报）。 */
@@ -61,9 +69,20 @@ void app.whenReady().then(() => {
   const storePath = resolveStorePath(userData);
   const store = loadStore(storePath);
   saveStore(storePath, store); // 首次启动时落盘默认存储
+  const settingsPath = resolveSettingsPath(userData);
+  let settings: Settings = loadSettingsFile(settingsPath);
+  saveSettingsFile(settingsPath, settings);
   for (const inst of store.instances) {
     session.fromPartition(partitionFor(inst.id));
   }
+
+  // 应用级设置：读内存值，写时合并回填后落盘（界面层草稿只在点保存后才调 set）。
+  ipcMain.handle("settings:get", () => settings);
+  ipcMain.handle("settings:set", (_event, patch: Partial<Settings>) => {
+    settings = withDefaults({ ...settings, ...patch });
+    saveSettingsFile(settingsPath, settings);
+    return settings;
+  });
 
   // renderer 只读存储；上报 webview 与实例的配对。
   ipcMain.handle("store:list", () => loadStore(storePath));
@@ -87,7 +106,7 @@ void app.whenReady().then(() => {
     saveStore(storePath, store);
     broadcastStoreChanged();
     const trimmed = label.trim();
-    if (trimmed) {
+    if (trimmed && settings.conflictNotify) {
       const dup = findDuplicateLabels(store.instances).find((d) => d.label === trimmed);
       if (dup) {
         new Notification({

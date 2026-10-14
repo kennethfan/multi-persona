@@ -20,6 +20,9 @@
   var modals = [];
   var panes = {};
   var modalNodes = {};
+  var dupIds = {};
+
+  var PALETTE = ["#3b82f6", "#22c55e", "#f59e0b", "#a855f7", "#ef4444", "#06b6d4", "#ec4899", "#6b7280"];
 
   function partitionFor(id) { return "persist:mp-" + id; }
   function projectOf(id) { return projById[id]; }
@@ -144,6 +147,11 @@
   function renderSidebar() {
     var list = document.getElementById("proj-list");
     list.innerHTML = "";
+    document.getElementById("sidebar").oncontextmenu = function (e) {
+      if (e.target.closest(".proj,.inst")) return;
+      e.preventDefault();
+      window.mpAPI.showContextMenu("sidebar", "", e.x, e.y);
+    };
     projects.forEach(function (p) {
       var head = el("div", "proj");
       var caret = el("span", "caret", collapsed[p.id] ? "▶" : "▼");
@@ -156,6 +164,10 @@
         collapsed[p.id] = !collapsed[p.id];
         renderSidebar();
       };
+      head.addEventListener("contextmenu", function (e) {
+        e.preventDefault();
+        window.mpAPI.showContextMenu("project", p.id, e.x, e.y);
+      });
       list.appendChild(head);
       if (collapsed[p.id]) return;
       instancesOf(p.id).forEach(function (c) {
@@ -164,7 +176,17 @@
         idot.style.background = c.color;
         item.appendChild(idot);
         item.appendChild(el("span", "", c.name));
+        if (c.label && c.label.trim()) item.appendChild(el("span", "lbl", c.label.trim()));
+        if (dupIds[c.id]) {
+          var dd = el("span", "dup-dot");
+          dd.title = "该账号同时出现在多个实例";
+          item.appendChild(dd);
+        }
         item.onclick = function () { switchInstance(c.id); };
+        item.addEventListener("contextmenu", function (e) {
+          e.preventDefault();
+          window.mpAPI.showContextMenu("instance", c.id, e.x, e.y);
+        });
         list.appendChild(item);
       });
     });
@@ -252,6 +274,119 @@
     renderModals();
   }
 
+  function promptDialog(opts) {
+    return new Promise(function (resolve) {
+      var overlay = document.getElementById("overlay");
+      overlay.innerHTML = "";
+      var box = el("div", "prompt");
+      box.appendChild(el("h3", "", opts.title));
+      var input = null;
+      if (opts.showInput !== false) {
+        input = el("input");
+        input.value = opts.initial || "";
+        input.placeholder = opts.placeholder || "";
+        box.appendChild(input);
+      }
+      var color = opts.initialColor || PALETTE[0];
+      if (opts.withPalette) {
+        if (PALETTE.indexOf(color) < 0) color = PALETTE[0];
+        var pal = el("div", "palette");
+        PALETTE.forEach(function (c) {
+          var s = el("span", "swatch" + (c === color ? " sel" : ""));
+          s.style.background = c;
+          s.onclick = function () {
+            color = c;
+            var all = pal.querySelectorAll(".swatch");
+            for (var i = 0; i < all.length; i++) all[i].classList.remove("sel");
+            s.classList.add("sel");
+          };
+          pal.appendChild(s);
+        });
+        box.appendChild(pal);
+      }
+      var row = el("div", "row");
+      var ok = el("button", "", opts.okLabel || "确定");
+      var cancel = el("button", "", "取消");
+      row.appendChild(cancel);
+      row.appendChild(ok);
+      box.appendChild(row);
+      overlay.appendChild(box);
+      overlay.hidden = false;
+      function done(result) {
+        overlay.hidden = true;
+        overlay.innerHTML = "";
+        resolve(result);
+      }
+      ok.onclick = function () {
+        var v = input ? input.value.trim() : "";
+        if (input && !v) { input.focus(); return; }
+        done({ value: v, color: color });
+      };
+      cancel.onclick = function () { done(null); };
+      if (input) {
+        input.onkeydown = function (e) {
+          if (e.key === "Enter") ok.onclick();
+          if (e.key === "Escape") done(null);
+        };
+        input.focus();
+      }
+    });
+  }
+
+  function afterMutation(promise) {
+    promise.then(function (s) { if (s) applyStore(s); });
+  }
+
+  window.mpAPI.onMenuCommand(function (m) {
+    if (m.cmd === "new-project") {
+      promptDialog({ title: "新建项目", placeholder: "项目名", withPalette: true })
+        .then(function (r) { if (r) afterMutation(window.mpAPI.addProject(r.value, r.color)); });
+      return;
+    }
+    var node = m.kind === "project" ? projectOf(m.id) : instanceOf(m.id);
+    if (!node) return;
+    if (m.cmd === "new-instance") {
+      promptDialog({ title: "在“" + node.name + "”下新建实例", placeholder: "实例名", withPalette: true, initialColor: node.color })
+        .then(function (r) { if (r) afterMutation(window.mpAPI.addInstance(m.id, r.value, r.color)); });
+    } else if (m.cmd === "new-instance-here") {
+      var p = projectOf(node.projectId);
+      promptDialog({ title: "在“" + (p ? p.name : "") + "”下新建实例", placeholder: "实例名", withPalette: true, initialColor: node.color })
+        .then(function (r) { if (r) afterMutation(window.mpAPI.addInstance(node.projectId, r.value, r.color)); });
+    } else if (m.cmd === "rename") {
+      promptDialog({ title: "重命名", initial: node.name })
+        .then(function (r) { if (r) afterMutation(window.mpAPI.renameNode(m.kind, m.id, r.value)); });
+    } else if (m.cmd === "recolor") {
+      promptDialog({ title: "更改颜色", showInput: false, withPalette: true, initialColor: node.color })
+        .then(function (r) { if (r) afterMutation(window.mpAPI.recolorNode(m.kind, m.id, r.color)); });
+    } else if (m.cmd === "set-label") {
+      promptDialog({ title: "标注账号", initial: node.label || "", placeholder: "如：Gmail 的 a@gmail.com" })
+        .then(function (r) { if (r) afterMutation(window.mpAPI.setLabel(m.id, r.value)); });
+    } else if (m.cmd === "delete" && m.kind === "instance") {
+      window.mpAPI.confirm({
+        message: "删除实例“" + node.name + "”？",
+        detail: "该实例的登录态及全部会话数据将被清除，不可恢复。",
+        okLabel: "删除",
+      }).then(function (yes) { if (yes) afterMutation(window.mpAPI.removeInstance(m.id)); });
+    } else if (m.cmd === "delete" && m.kind === "project") {
+      var names = instancesOf(m.id).map(function (c) { return c.name; }).join("、") || "（空项目）";
+      window.mpAPI.confirm({
+        message: "删除项目“" + node.name + "”？",
+        detail: "其下实例（" + names + "）的登录态及会话数据将一并清除，不可恢复。",
+        okLabel: "删除",
+      }).then(function (yes) { if (yes) afterMutation(window.mpAPI.removeProject(m.id)); });
+    }
+  });
+
+  function refreshDuplicates() {
+    window.mpAPI.duplicateLabels().then(function (dups) {
+      dupIds = {};
+      dups.forEach(function (d) {
+        d.instanceIds.forEach(function (id) { dupIds[id] = true; });
+      });
+      renderSidebar();
+    });
+  }
+
   document.getElementById("new-tab").onclick = function () { openTab(); };
   document.getElementById("split-toggle").onclick = toggleSplit;
 
@@ -292,6 +427,7 @@
       activeTabId = tabs.length ? tabs[tabs.length - 1].id : null;
     }
     render();
+    refreshDuplicates();
   }
 
   window.mpAPI.onStoreChanged(function () {

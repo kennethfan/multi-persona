@@ -23,6 +23,22 @@ export interface MpAPI {
   duplicateLabels(): Promise<{ label: string; instanceIds: string[] }[]>;
   /** 存储变更通知（删实例/改标注后），界面层重拉存储并重绘。 */
   onStoreChanged(handler: () => void): void;
+  /** 新建项目（主进程顺带建 1 个默认实例）。 */
+  addProject(name: string, color: string): Promise<Store>;
+  /** 新建实例；所属项目不存在时抛错。 */
+  addInstance(projectId: string, name: string, color: string): Promise<Store>;
+  /** 改名（项目/实例）。 */
+  renameNode(kind: "project" | "instance", id: string, name: string): Promise<Store>;
+  /** 改色（项目/实例）。 */
+  recolorNode(kind: "project" | "instance", id: string, color: string): Promise<Store>;
+  /** 删项目：主进程逐实例先清分区再删元数据。界面层必须先二次确认再调。 */
+  removeProject(projectId: string): Promise<Store>;
+  /** 系统原生确认框（dialog，跨平台）。 */
+  confirm(opts: { message: string; detail?: string; okLabel?: string }): Promise<boolean>;
+  /** 上报左栏树右键，主进程弹系统原生菜单。 */
+  showContextMenu(kind: "project" | "instance" | "sidebar", id: string, x: number, y: number): void;
+  /** 菜单命令回传。 */
+  onMenuCommand(handler: (cmd: { cmd: string; kind: "project" | "instance" | "sidebar"; id: string }) => void): void;
 }
 
 contextBridge.exposeInMainWorld("mpAPI", {
@@ -41,5 +57,25 @@ contextBridge.exposeInMainWorld("mpAPI", {
     ipcRenderer.invoke("store:duplicate-labels"),
   onStoreChanged: (handler: () => void): void => {
     ipcRenderer.on("mp:store-changed", () => handler());
+  },
+  addProject: (name: string, color: string): Promise<Store> =>
+    ipcRenderer.invoke("store:add-project", name, color),
+  addInstance: (projectId: string, name: string, color: string): Promise<Store> =>
+    ipcRenderer.invoke("store:add-instance", projectId, name, color),
+  renameNode: (kind: "project" | "instance", id: string, name: string): Promise<Store> =>
+    ipcRenderer.invoke("store:rename", kind, id, name),
+  recolorNode: (kind: "project" | "instance", id: string, color: string): Promise<Store> =>
+    ipcRenderer.invoke("store:recolor", kind, id, color),
+  removeProject: (projectId: string): Promise<Store> =>
+    ipcRenderer.invoke("store:remove-project", projectId),
+  confirm: (opts: { message: string; detail?: string; okLabel?: string }): Promise<boolean> =>
+    ipcRenderer.invoke("ui:confirm", opts),
+  showContextMenu: (kind: "project" | "instance", id: string, x: number, y: number): void => {
+    ipcRenderer.send("mp:context-menu", { kind, id, x, y });
+  },
+  onMenuCommand: (
+    handler: (cmd: { cmd: string; kind: "project" | "instance"; id: string }) => void,
+  ): void => {
+    ipcRenderer.on("mp:menu-cmd", (_e, cmd) => handler(cmd));
   },
 } satisfies MpAPI);

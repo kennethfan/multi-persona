@@ -1,5 +1,7 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, session } from "electron";
 import path from "node:path";
+import { loadContainers, resolveStorePath, saveContainers } from "./container-store";
+import { partitionFor } from "./sessions";
 import { createWindowOptions } from "./window-config";
 
 function createMainWindow(): BrowserWindow {
@@ -10,6 +12,14 @@ function createMainWindow(): BrowserWindow {
 }
 
 void app.whenReady().then(() => {
+  // T3：加载容器并为每个容器预取专属持久化分区（登录态落盘，重启保留）。
+  const storePath = resolveStorePath(app.getPath("userData"));
+  const containers = loadContainers(storePath);
+  saveContainers(storePath, containers); // 首次启动时落盘 5 预置容器
+  for (const c of containers) {
+    session.fromPartition(partitionFor(c.id));
+  }
+
   createMainWindow();
 
   app.on("activate", () => {

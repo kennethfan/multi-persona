@@ -18,6 +18,7 @@ import {
   removeProjectCascade,
   renameInstance,
   renameProject,
+  setInstanceDownloadDir,
   setInstanceLabel,
   wrapProjects,
 } from "./projects";
@@ -153,6 +154,23 @@ describe("账号标注与双实例提醒", () => {
     expect(findDuplicateLabels(list)).toHaveLength(1);
     list = setInstanceLabel(list, "default-2-i1", "b@gmail.com");
     expect(findDuplicateLabels(list)).toHaveLength(0);
+  });
+});
+
+describe("实例下载目录覆盖", () => {
+  it("设置专属目录；空白=清除覆盖（删字段，恢复跟随全局）", () => {
+    let list = createDefaultInstances(createDefaultProjects());
+    expect(getInstance(list, "default-1-i1")?.downloadDir).toBeUndefined();
+    list = setInstanceDownloadDir(list, "default-1-i1", "  /tmp/dl  ");
+    expect(getInstance(list, "default-1-i1")?.downloadDir).toBe("/tmp/dl");
+    list = setInstanceDownloadDir(list, "default-1-i1", "   ");
+    expect(getInstance(list, "default-1-i1")?.downloadDir).toBeUndefined();
+    expect("downloadDir" in (getInstance(list, "default-1-i1") as object)).toBe(false);
+  });
+
+  it("id 不存在抛错", () => {
+    const list = createDefaultInstances(createDefaultProjects());
+    expect(() => setInstanceDownloadDir(list, "nope", "/tmp/dl")).toThrow();
   });
 });
 

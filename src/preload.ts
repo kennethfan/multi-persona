@@ -24,6 +24,14 @@ export interface MpAPI {
   clearData(instanceId: string): Promise<string>;
   /** 手工标注实例的站点账号（空字串=清除标注）。 */
   setLabel(instanceId: string, label: string): Promise<Store>;
+  /** 设实例专属下载目录（空字串=清除覆盖，恢复跟随全局）。 */
+  setDownloadDir(instanceId: string, dir: string): Promise<Store>;
+  /** 系统目录选择器（取消返回 null）。 */
+  pickDirectory(defaultPath?: string): Promise<string | null>;
+  /** 系统默认下载目录（展示“当前生效目录”用）。 */
+  systemDownloadDir(): Promise<string>;
+  /** 下载成功提示（主进程 will-download 完成时推送）。 */
+  onToast(handler: (text: string) => void): void;
   /** 同一账号出现在 ≥2 实例即返回（全局语义，不分是否同项目）。 */
   duplicateLabels(): Promise<{ label: string; instanceIds: string[] }[]>;
   /** 存储变更通知（删实例/改标注后），界面层重拉存储并重绘。 */
@@ -66,10 +74,18 @@ contextBridge.exposeInMainWorld("mpAPI", {
     ipcRenderer.invoke("store:clear-data", instanceId),
   setLabel: (instanceId: string, label: string): Promise<Store> =>
     ipcRenderer.invoke("store:set-label", instanceId, label),
+  setDownloadDir: (instanceId: string, dir: string): Promise<Store> =>
+    ipcRenderer.invoke("store:set-download-dir", instanceId, dir),
+  pickDirectory: (defaultPath?: string): Promise<string | null> =>
+    ipcRenderer.invoke("dialog:pick-directory", defaultPath),
+  systemDownloadDir: (): Promise<string> => ipcRenderer.invoke("downloads:system-dir"),
   duplicateLabels: (): Promise<{ label: string; instanceIds: string[] }[]> =>
     ipcRenderer.invoke("store:duplicate-labels"),
   onStoreChanged: (handler: () => void): void => {
     ipcRenderer.on("mp:store-changed", () => handler());
+  },
+  onToast: (handler: (text: string) => void): void => {
+    ipcRenderer.on("mp:toast", (_e, text: string) => handler(text));
   },
   addProject: (name: string, color: string): Promise<Store> =>
     ipcRenderer.invoke("store:add-project", name, color),

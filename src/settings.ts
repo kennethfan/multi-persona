@@ -9,12 +9,15 @@ export interface Settings {
   popupBehavior: "modal" | "tab";
   /** 同账号冲突时是否发系统通知（常驻红点不受此开关影响）。 */
   conflictNotify: boolean;
+  /** 应用默认下载目录；空字串=跟随系统默认下载目录。 */
+  downloadDir: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   newTabDefault: "current",
   popupBehavior: "modal",
   conflictNotify: true,
+  downloadDir: "",
 };
 
 /** 缺字段回填默认值，非法值回退默认（老版本 settings.json 直接可用）。 */
@@ -23,6 +26,7 @@ export function withDefaults(raw: Partial<Settings>): Settings {
     newTabDefault: raw.newTabDefault === "ask" ? "ask" : "current",
     popupBehavior: raw.popupBehavior === "tab" ? "tab" : "modal",
     conflictNotify: raw.conflictNotify === false ? false : true,
+    downloadDir: typeof raw.downloadDir === "string" ? raw.downloadDir : "",
   };
 }
 

@@ -21,7 +21,7 @@
   var panes = {};
   var modalNodes = {};
   var dupIds = {};
-  var settings = { newTabDefault: "current", popupBehavior: "modal", conflictNotify: true };
+  var settings = { newTabDefault: "current", popupBehavior: "modal", conflictNotify: true, downloadDir: "" };
   var showingSettings = false;
   var settingsDraft = null;
 
@@ -402,6 +402,26 @@
     } else if (m.cmd === "set-label") {
       promptDialog({ title: "标注账号", initial: node.label || "", placeholder: "如：Gmail 的 a@gmail.com" })
         .then(function (r) { if (r) afterMutation(window.mpAPI.setLabel(m.id, r.value)); });
+    } else if (m.cmd === "set-download-dir" && m.kind === "instance") {
+      window.mpAPI.systemDownloadDir().then(function (sys) {
+        var eff = node.downloadDir || settings.downloadDir || sys;
+        var mode = node.downloadDir ? "专属目录" : "跟随全局";
+        window.mpAPI.confirm({
+          message: "更改实例“" + node.name + "”的下载目录？",
+          detail: "当前：" + eff + "（" + mode + "）\n点“选择目录”打开系统选择器；若在选择器里取消，可接着选恢复跟随全局。",
+          okLabel: "选择目录",
+        }).then(function (yes) {
+          if (!yes) return;
+          window.mpAPI.pickDirectory(eff).then(function (picked) {
+            if (picked) { afterMutation(window.mpAPI.setDownloadDir(m.id, picked)); return; }
+            window.mpAPI.confirm({
+              message: "恢复跟随全局下载目录？",
+              detail: "该实例的专属目录将被清除，以后下载跟随应用默认（当前应用默认：" + (settings.downloadDir || sys) + "）。",
+              okLabel: "恢复跟随",
+            }).then(function (yes2) { if (yes2) afterMutation(window.mpAPI.setDownloadDir(m.id, "")); });
+          });
+        });
+      });
     } else if (m.cmd === "clear-cache" && m.kind === "instance") {
       window.mpAPI.confirm({
         message: "清除实例“" + node.name + "”的缓存？",
@@ -450,7 +470,7 @@
 
   function showSettings() {
     showingSettings = true;
-    settingsDraft = { newTabDefault: settings.newTabDefault, popupBehavior: settings.popupBehavior, conflictNotify: settings.conflictNotify };
+    settingsDraft = { newTabDefault: settings.newTabDefault, popupBehavior: settings.popupBehavior, conflictNotify: settings.conflictNotify, downloadDir: settings.downloadDir || "" };
     renderSettingsView();
     document.getElementById("views").style.display = "none";
     document.getElementById("settings-wrap").hidden = false;
@@ -491,6 +511,22 @@
     cb.onchange = function () { d.conflictNotify = cb.checked; };
     l3.appendChild(cb);
     l3.appendChild(el("span", "", "同账号冲突时发系统通知"));
+    var l4 = el("label", "", "默认下载目录（实例没单独设置时用它）");
+    var dlPath = el("span", "", d.downloadDir || "系统默认下载目录");
+    dlPath.title = d.downloadDir || "";
+    l4.appendChild(dlPath);
+    var dlRow = el("div", "row");
+    var pick = el("button", "", "选择…");
+    pick.onclick = function () {
+      window.mpAPI.pickDirectory(d.downloadDir || undefined).then(function (p) {
+        if (p) { d.downloadDir = p; renderSettingsView(); }
+      });
+    };
+    var resetDl = el("button", "", "恢复系统默认");
+    resetDl.onclick = function () { d.downloadDir = ""; renderSettingsView(); };
+    dlRow.appendChild(pick);
+    dlRow.appendChild(resetDl);
+    l4.appendChild(dlRow);
     var row = el("div", "row");
     var back = el("button", "", "返回");
     back.onclick = exitSettings;
@@ -503,6 +539,7 @@
     box.appendChild(l1);
     box.appendChild(l2);
     box.appendChild(l3);
+    box.appendChild(l4);
     box.appendChild(row);
     wrap.appendChild(box);
   }
@@ -553,6 +590,24 @@
     render();
     refreshDuplicates();
   }
+
+  var toastTimer = null;
+  function showToast(text) {
+    var layer = document.getElementById("toast-layer");
+    if (!layer) {
+      layer = document.createElement("div");
+      layer.id = "toast-layer";
+      document.body.appendChild(layer);
+    }
+    var node = document.createElement("div");
+    node.className = "toast";
+    node.textContent = text;
+    layer.appendChild(node);
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { layer.innerHTML = ""; toastTimer = null; }, 2000);
+  }
+
+  window.mpAPI.onToast(showToast);
 
   window.mpAPI.onStoreChanged(function () {
   window.mpAPI.listStore().then(applyStore);

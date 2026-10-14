@@ -1,5 +1,7 @@
 import { app, BrowserWindow, Menu, Notification, dialog, ipcMain, session } from "electron";
+import type { DownloadItem } from "electron";
 import path from "node:path";
+import { decideDownloadPath } from "./downloads";
 import { loadStore, migrateLegacyStore, resolveStorePath, saveStore } from "./project-store";
 import {
   addInstance,
@@ -12,6 +14,7 @@ import {
   removeProjectCascade,
   renameInstance,
   renameProject,
+  setInstanceDownloadDir,
   setInstanceLabel,
 } from "./projects";
 import { buildMenuCommands, menuLabel } from "./menus";
@@ -44,6 +47,57 @@ function broadcastStoreChanged(): void {
   }
 }
 
+function broadcastToast(text: string): void {
+  for (const w of BrowserWindow.getAllWindows()) {
+    w.webContents.send("mp:toast", text);
+  }
+}
+
+/**
+ * 实例分区下载落盘：will-download 直接指定保存路径，不弹另存为框。
+ * 设置/存储每次现读——改完设置后下一次下载即生效；读存储失败按跟随全局处理。
+ */
+function handleWillDownload(
+  instanceId: string,
+  item: DownloadItem,
+  storePath: string,
+  settingsPath: string,
+): void {
+  const settings = loadSettingsFile(settingsPath);
+  let instanceDir: string | undefined;
+  try {
+    instanceDir = loadStore(storePath).instances.find((c) => c.id === instanceId)?.downloadDir;
+  } catch {
+    instanceDir = undefined;
+  }
+  const systemDir = app.getPath("downloads");
+  const { savePath, fellBack } = decideDownloadPath({
+    instanceDir,
+    appDir: settings.downloadDir,
+    systemDir,
+    filename: item.getFilename(),
+  });
+  if (fellBack) {
+    new Notification({
+      title: "下载目录不可用，已回退到系统默认",
+      body: savePath,
+    }).show();
+  }
+  item.setSavePath(savePath);
+  item.on("done", (_e, state) => {
+    if (state === "completed") broadcastToast(`已下载：${item.getFilename()}`);
+  });
+}
+
+/** 给实例专属分区挂下载拦截（含 <webview> 同分区下载）。 */
+function watchDownloads(instanceId: string, storePath: string, settingsPath: string): void {
+  session
+    .fromPartition(partitionFor(instanceId))
+    .on("will-download", (_event, item) =>
+      handleWillDownload(instanceId, item, storePath, settingsPath),
+    );
+}
+
 function createMainWindow(): BrowserWindow {
   const win = new BrowserWindow(createWindowOptions());
   // 站内全部新窗口请求在此拦截：一律 deny 原生窗口，转界面层开应用内标签/modal。
@@ -73,7 +127,7 @@ void app.whenReady().then(() => {
   let settings: Settings = loadSettingsFile(settingsPath);
   saveSettingsFile(settingsPath, settings);
   for (const inst of store.instances) {
-    session.fromPartition(partitionFor(inst.id));
+    watchDownloads(inst.id, storePath, settingsPath);
   }
 
   // 应用级设置：读内存值，写时合并回填后落盘（界面层草稿只在点保存后才调 set）。
@@ -134,18 +188,39 @@ void app.whenReady().then(() => {
     return store;
   });
   ipcMain.handle("store:duplicate-labels", () => findDuplicateLabels(loadStore(storePath).instances));
+  // 实例专属下载目录：空字串=清除覆盖（恢复跟随全局）。
+  ipcMain.handle("store:set-download-dir", (_event, instanceId: string, dir: string) => {
+    const store = loadStore(storePath);
+    store.instances = setInstanceDownloadDir(store.instances, instanceId, dir);
+    saveStore(storePath, store);
+    broadcastStoreChanged();
+    return store;
+  });
+  // 系统目录选择器：取消返回 null；调用方传当前生效目录做 defaultPath。
+  ipcMain.handle("dialog:pick-directory", async (event, defaultPath?: string) => {
+    const parent = BrowserWindow.fromWebContents(event.sender) ?? undefined;
+    const picked = await dialog.showOpenDialog(parent as BrowserWindow, {
+      properties: ["openDirectory", "createDirectory"],
+      defaultPath,
+    });
+    return picked.canceled ? null : (picked.filePaths[0] ?? null);
+  });
+  // 渲染进程算“当前生效目录”展示用（系统默认路径只在主进程可取）。
+  ipcMain.handle("downloads:system-dir", () => app.getPath("downloads"));
   // 新建项目：顺带建 1 个默认实例（与预置行为一致，开箱即用）。
   ipcMain.handle("store:add-project", (_event, name: string, color: string) => {
     const store = loadStore(storePath);
     const projectId = nextId("p");
     store.projects = addProject(store.projects, { id: projectId, name, color });
+    const instanceId = nextId("i");
     store.instances = addInstance(store.instances, {
-      id: nextId("i"),
+      id: instanceId,
       projectId,
       name: "实例一",
       color,
     });
     saveStore(storePath, store);
+    watchDownloads(instanceId, storePath, settingsPath);
     broadcastStoreChanged();
     return store;
   });
@@ -155,8 +230,10 @@ void app.whenReady().then(() => {
     if (!getProject(store.projects, projectId)) {
       throw new Error(`项目不存在: ${projectId}`);
     }
-    store.instances = addInstance(store.instances, { id: nextId("i"), projectId, name, color });
+    const instanceId = nextId("i");
+    store.instances = addInstance(store.instances, { id: instanceId, projectId, name, color });
     saveStore(storePath, store);
+    watchDownloads(instanceId, storePath, settingsPath);
     broadcastStoreChanged();
     return store;
   });

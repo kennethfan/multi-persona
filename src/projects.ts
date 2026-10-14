@@ -20,6 +20,8 @@ export interface Instance {
   color: string;
   /** 手工标注的站点账号（如“Gmail 的 a@gmail.com”）；缺失或空白=未标注。 */
   label?: string;
+  /** 专属下载目录；缺失或空白=跟随全局（应用默认下载目录）。 */
+  downloadDir?: string;
 }
 
 /** 首次启动预置的 5 个空项目：名字与颜色各不相同。 */
@@ -127,6 +129,23 @@ export function setInstanceLabel(list: Instance[], id: string, label: string): I
     if (c.id !== id) return c;
     found = true;
     return { ...c, label };
+  });
+  if (!found) throw new Error(`实例不存在: ${id}`);
+  return next;
+}
+
+export function setInstanceDownloadDir(list: Instance[], id: string, dir: string): Instance[] {
+  let found = false;
+  const next = list.map((c) => {
+    if (c.id !== id) return c;
+    found = true;
+    const trimmed = dir.trim();
+    if (!trimmed) {
+      const rest = { ...c };
+      delete rest.downloadDir;
+      return rest;
+    }
+    return { ...c, downloadDir: trimmed };
   });
   if (!found) throw new Error(`实例不存在: ${id}`);
   return next;

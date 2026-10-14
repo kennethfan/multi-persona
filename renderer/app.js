@@ -21,6 +21,9 @@
   var panes = {};
   var modalNodes = {};
   var dupIds = {};
+  var settings = { newTabDefault: "current", popupBehavior: "modal", conflictNotify: true };
+  var showingSettings = false;
+  var settingsDraft = null;
 
   var PALETTE = ["#3b82f6", "#22c55e", "#f59e0b", "#a855f7", "#ef4444", "#06b6d4", "#ec4899", "#6b7280"];
 
@@ -36,6 +39,23 @@
   }
 
   function openTab(url, instanceId) {
+    if (instanceId) { makeTab(url, instanceId); return; }
+    // 新标签归属：默认当前实例；设为“每次都问”时弹实例选择浮层（草稿不落地，选完才开）。
+    if (settings.newTabDefault === "ask" && instances.length > 1) {
+      promptDialog({
+        title: "新标签归属哪个实例？",
+        choices: instances.map(function (c) {
+          var p = projectOf(c.projectId);
+          return { value: c.id, label: (p ? p.name + " / " : "") + c.name };
+        }),
+      }).then(function (r) { if (r) makeTab(url, r.choice); });
+      return;
+    }
+    makeTab(url, currentInstanceId);
+  }
+
+  function makeTab(url, instanceId) {
+    exitSettings();
     tabSeq += 1;
     var tab = { id: "t-" + tabSeq, instanceId: instanceId || currentInstanceId, url: url || BLANK, title: "" };
     tabs.push(tab);
@@ -45,6 +65,7 @@
   }
 
   function closeTab(id) {
+    exitSettings();
     tabs = tabs.filter(function (t) { return t.id !== id; });
     var p = panes[id];
     if (p) { p.pane.remove(); delete panes[id]; }
@@ -54,6 +75,7 @@
   }
 
   function switchInstance(id) {
+    exitSettings();
     currentInstanceId = id;
     var recent = null;
     for (var i = tabs.length - 1; i >= 0; i--) {
@@ -207,7 +229,7 @@
       var x = el("button", "close", "×");
       x.onclick = function (e) { e.stopPropagation(); closeTab(t.id); };
       tab.appendChild(x);
-      tab.onclick = function () { activeTabId = t.id; render(); };
+      tab.onclick = function () { exitSettings(); activeTabId = t.id; render(); };
       bar.appendChild(tab);
     });
   }
@@ -281,7 +303,17 @@
       var box = el("div", "prompt");
       box.appendChild(el("h3", "", opts.title));
       var input = null;
-      if (opts.showInput !== false) {
+      var select = null;
+      if (opts.choices) {
+        select = el("select");
+        opts.choices.forEach(function (ch) {
+          var o = document.createElement("option");
+          o.value = ch.value;
+          o.textContent = ch.label;
+          select.appendChild(o);
+        });
+        box.appendChild(select);
+      } else if (opts.showInput !== false) {
         input = el("input");
         input.value = opts.initial || "";
         input.placeholder = opts.placeholder || "";
@@ -318,6 +350,7 @@
         resolve(result);
       }
       ok.onclick = function () {
+        if (select) { done({ choice: select.value }); return; }
         var v = input ? input.value.trim() : "";
         if (input && !v) { input.focus(); return; }
         done({ value: v, color: color });
@@ -387,12 +420,83 @@
     });
   }
 
+  function exitSettings() {
+    if (!showingSettings) return;
+    showingSettings = false;
+    settingsDraft = null;
+    document.getElementById("settings-wrap").hidden = true;
+    document.getElementById("views").style.display = "flex";
+  }
+
+  function showSettings() {
+    showingSettings = true;
+    settingsDraft = { newTabDefault: settings.newTabDefault, popupBehavior: settings.popupBehavior, conflictNotify: settings.conflictNotify };
+    renderSettingsView();
+    document.getElementById("views").style.display = "none";
+    document.getElementById("settings-wrap").hidden = false;
+  }
+
+  function renderSettingsView() {
+    var wrap = document.getElementById("settings-wrap");
+    wrap.innerHTML = "";
+    var d = settingsDraft;
+    var box = el("div", "settings");
+    box.appendChild(el("h3", "", "设置"));
+    var l1 = el("label", "", "新标签默认归属");
+    var s1 = document.createElement("select");
+    [["current", "当前实例"], ["ask", "每次都问"]].forEach(function (o) {
+      var op = document.createElement("option");
+      op.value = o[0];
+      op.textContent = o[1];
+      if (d.newTabDefault === o[0]) op.selected = true;
+      s1.appendChild(op);
+    });
+    s1.onchange = function () { d.newTabDefault = s1.value; };
+    l1.appendChild(s1);
+    var l2 = el("label", "", "站内新窗口行为");
+    var s2 = document.createElement("select");
+    [["modal", "应用内弹窗"], ["tab", "应用内新标签"]].forEach(function (o) {
+      var op = document.createElement("option");
+      op.value = o[0];
+      op.textContent = o[1];
+      if (d.popupBehavior === o[0]) op.selected = true;
+      s2.appendChild(op);
+    });
+    s2.onchange = function () { d.popupBehavior = s2.value; };
+    l2.appendChild(s2);
+    var l3 = el("label", "check", "");
+    var cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = d.conflictNotify;
+    cb.onchange = function () { d.conflictNotify = cb.checked; };
+    l3.appendChild(cb);
+    l3.appendChild(el("span", "", "同账号冲突时发系统通知"));
+    var row = el("div", "row");
+    var back = el("button", "", "返回");
+    back.onclick = exitSettings;
+    var save = el("button", "", "保存");
+    save.onclick = function () {
+      window.mpAPI.setSettings(d).then(function (s) { settings = s; exitSettings(); });
+    };
+    row.appendChild(back);
+    row.appendChild(save);
+    box.appendChild(l1);
+    box.appendChild(l2);
+    box.appendChild(l3);
+    box.appendChild(row);
+    wrap.appendChild(box);
+  }
+
+  document.getElementById("settings-btn").onclick = showSettings;
   document.getElementById("new-tab").onclick = function () { openTab(); };
   document.getElementById("split-toggle").onclick = toggleSplit;
 
   window.mpAPI.onWindowOpen(function (req) {
     var instanceId = req.instanceId || currentInstanceId;
-    if (req.disposition === "foreground-tab" || req.disposition === "background-tab") {
+    // 弹窗行为设为“新标签”时，所有站内新窗口都进标签；否则只有链接进标签、window.open 进 modal。
+    if (settings.popupBehavior === "tab") {
+      openTab(req.url, instanceId);
+    } else if (req.disposition === "foreground-tab" || req.disposition === "background-tab") {
       openTab(req.url, instanceId);
     } else {
       openModal(req.url, instanceId, activeTabId);
@@ -431,7 +535,8 @@
   }
 
   window.mpAPI.onStoreChanged(function () {
-    window.mpAPI.listStore().then(applyStore);
+  window.mpAPI.listStore().then(applyStore);
+  window.mpAPI.getSettings().then(function (s) { settings = s; });
   });
 
   window.mpAPI.listStore().then(applyStore);

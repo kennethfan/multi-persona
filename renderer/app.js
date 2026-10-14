@@ -264,12 +264,39 @@
     }
   });
 
-  window.mpAPI.listStore().then(function (store) {
+  // 存储快照应用（含存储变更通知后的重拉）：重建索引，清掉已删实例的标签/modal。
+  function applyStore(store) {
     projects = store.projects;
     instances = store.instances;
+    projById = {};
+    instById = {};
     store.projects.forEach(function (p) { projById[p.id] = p; });
     store.instances.forEach(function (c) { instById[c.id] = c; });
-    currentInstanceId = store.instances.length ? store.instances[0].id : "";
+    tabs = tabs.filter(function (t) {
+      if (instById[t.instanceId]) return true;
+      var p = panes[t.id];
+      if (p) { p.pane.remove(); delete panes[t.id]; }
+      return false;
+    });
+    if (split && (!tabOf(split.leftTabId) || !tabOf(split.rightTabId))) split = null;
+    modals = modals.filter(function (m) {
+      if (instById[m.instanceId]) return true;
+      var node = modalNodes[m.id];
+      if (node) { node.remove(); delete modalNodes[m.id]; }
+      return false;
+    });
+    if (!instById[currentInstanceId]) {
+      currentInstanceId = instances.length ? instances[0].id : "";
+      activeTabId = null;
+    } else if (activeTabId && !tabOf(activeTabId)) {
+      activeTabId = tabs.length ? tabs[tabs.length - 1].id : null;
+    }
     render();
+  }
+
+  window.mpAPI.onStoreChanged(function () {
+    window.mpAPI.listStore().then(applyStore);
   });
+
+  window.mpAPI.listStore().then(applyStore);
 })();

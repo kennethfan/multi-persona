@@ -42,7 +42,7 @@ jobs:
           echo "tag version: $VERSION"
           npm version "$VERSION" --no-git-tag-version --allow-same-version
           node -e "console.log('package version:', require('./package.json').version)"
-      - run: npm run ${{ matrix.build-cmd }}
+      - run: npm run ${{ matrix.build-cmd }} -- --publish never
       - run: ls -lh release/
         shell: bash
       - uses: actions/upload-artifact@v4

@@ -31,6 +31,8 @@ export interface MpAPI {
   setLabel(instanceId: string, label: string): Promise<Store>;
   /** 设实例专属下载目录（空字串=清除覆盖，恢复跟随全局）。 */
   setDownloadDir(instanceId: string, dir: string): Promise<Store>;
+  /** 设实例专属 UA（空字串=清除覆盖，恢复跟随全局；非法抛错）。 */
+  setUserAgent(instanceId: string, userAgent: string): Promise<Store>;
   /** 系统目录选择器（取消返回 null）。 */
   pickDirectory(defaultPath?: string): Promise<string | null>;
   /** 系统默认下载目录（展示“当前生效目录”用）。 */
@@ -111,6 +113,8 @@ contextBridge.exposeInMainWorld("mpAPI", {
     ipcRenderer.invoke("store:set-label", instanceId, label),
   setDownloadDir: (instanceId: string, dir: string): Promise<Store> =>
     ipcRenderer.invoke("store:set-download-dir", instanceId, dir),
+  setUserAgent: (instanceId: string, userAgent: string): Promise<Store> =>
+    ipcRenderer.invoke("store:set-user-agent", instanceId, userAgent),
   pickDirectory: (defaultPath?: string): Promise<string | null> =>
     ipcRenderer.invoke("dialog:pick-directory", defaultPath),
   systemDownloadDir: (): Promise<string> => ipcRenderer.invoke("downloads:system-dir"),

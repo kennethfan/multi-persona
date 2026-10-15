@@ -43,30 +43,34 @@ describe("menuLabel", () => {
 });
 
 describe("buildGuestMenuCommands", () => {
-  it("空白处：只有导航三件套", () => {
+  it("空白处：导航三件套 + 检查", () => {
     expect(
-      buildGuestMenuCommands({ linkURL: "", srcURL: "", isImage: false, hasSelection: false }),
-    ).toEqual(["nav-back", "nav-forward", "nav-reload"]);
+      buildGuestMenuCommands({ linkURL: "", srcURL: "", isImage: false, hasSelection: false, x: 0, y: 0 }),
+    ).toEqual(["nav-back", "nav-forward", "nav-reload", "inspect"]);
   });
 
-  it("链接上：链接组在前，导航组在后", () => {
+  it("链接上：链接组在前，导航组、检查组在后", () => {
     expect(
       buildGuestMenuCommands({
         linkURL: "https://example.com",
         srcURL: "",
         isImage: false,
         hasSelection: false,
+        x: 10,
+        y: 20,
       }),
-    ).toEqual(["open-link-tab", "copy-link", "nav-back", "nav-forward", "nav-reload"]);
+    ).toEqual(["open-link-tab", "copy-link", "nav-back", "nav-forward", "nav-reload", "inspect"]);
   });
 
-  it("图片链接：链接组、图片组、导航组依次出现", () => {
+  it("图片链接：链接组、图片组、导航组、检查组依次出现", () => {
     expect(
       buildGuestMenuCommands({
         linkURL: "https://example.com",
         srcURL: "https://example.com/a.png",
         isImage: true,
         hasSelection: false,
+        x: 10,
+        y: 20,
       }),
     ).toEqual([
       "open-link-tab",
@@ -75,17 +79,20 @@ describe("buildGuestMenuCommands", () => {
       "nav-back",
       "nav-forward",
       "nav-reload",
+      "inspect",
     ]);
   });
 
-  it("选中文字：复制夹在内容组与导航组之间", () => {
+  it("选中文字：复制夹在内容组与导航组之间，检查永远末尾", () => {
     const cmds = buildGuestMenuCommands({
       linkURL: "",
       srcURL: "",
       isImage: false,
       hasSelection: true,
+      x: 0,
+      y: 0,
     });
-    expect(cmds).toEqual(["copy-selection", "nav-back", "nav-forward", "nav-reload"]);
+    expect(cmds).toEqual(["copy-selection", "nav-back", "nav-forward", "nav-reload", "inspect"]);
     for (const cmd of cmds) {
       expect(guestMenuLabel(cmd).length).toBeGreaterThan(0);
     }

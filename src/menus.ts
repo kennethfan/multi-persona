@@ -68,9 +68,13 @@ export interface GuestContext {
   isImage: boolean;
   /** 是否有选中文字。 */
   hasSelection: boolean;
+  /** 右键点击点的视口坐标（检查元素定位用）。 */
+  x: number;
+  /** 右键点击点的视口坐标（检查元素定位用）。 */
+  y: number;
 }
 
-/** 页面区右键命令：open-link-tab=新标签打开链接，copy-link=复制链接地址，save-image=图片另存为，copy-selection=复制选中文字，nav-back/nav-forward/nav-reload=导航三件套。 */
+/** 页面区右键命令：open-link-tab=新标签打开链接，copy-link=复制链接地址，save-image=图片另存为，copy-selection=复制选中文字，nav-back/nav-forward/nav-reload=导航三件套，inspect=检查元素（末尾独立成组）。 */
 export type GuestCmd =
   | "open-link-tab"
   | "copy-link"
@@ -78,11 +82,12 @@ export type GuestCmd =
   | "copy-selection"
   | "nav-back"
   | "nav-forward"
-  | "nav-reload";
+  | "nav-reload"
+  | "inspect";
 
 /**
- * 页面区某次右键应出现哪些命令（顺序即展示顺序；调用方在导航组前视情况加分隔线）。
- * 链接组 > 图片组 > 选中组 > 导航组；空白处只有导航组。
+ * 页面区某次右键应出现哪些命令（顺序即展示顺序；调用方在导航组、检查组前视情况加分隔线）。
+ * 链接组 > 图片组 > 选中组 > 导航组 > 检查组；空白处只有导航组 + 检查组。
  */
 export function buildGuestMenuCommands(ctx: GuestContext): GuestCmd[] {
   const cmds: GuestCmd[] = [];
@@ -90,6 +95,7 @@ export function buildGuestMenuCommands(ctx: GuestContext): GuestCmd[] {
   if (ctx.isImage && ctx.srcURL) cmds.push("save-image");
   if (ctx.hasSelection) cmds.push("copy-selection");
   cmds.push("nav-back", "nav-forward", "nav-reload");
+  cmds.push("inspect");
   return cmds;
 }
 
@@ -110,5 +116,7 @@ export function guestMenuLabel(cmd: GuestCmd): string {
       return "前进";
     case "nav-reload":
       return "重新加载";
+    case "inspect":
+      return "检查";
   }
 }

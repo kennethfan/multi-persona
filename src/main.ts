@@ -29,6 +29,7 @@ import {
 } from "./settings";
 import type { Settings } from "./settings";
 import { createWindowOptions } from "./window-config";
+import { toChromeLikeUA } from "./user-agent";
 import { loadTabsSnapshot, resolveTabsDbPath, saveTabsSnapshot } from "./tabs-db";
 import type { TabsSnapshot } from "./tabs-db";
 import { loadBookmarks, resolveBookmarksDbPath, saveBookmarks } from "./bookmarks-db";
@@ -263,6 +264,16 @@ function createMainWindow(): BrowserWindow {  const win = new BrowserWindow(crea
   // 站内全部新窗口请求在此拦截：一律 deny 原生窗口，转界面层开应用内标签/modal。
   // 注意：<webview> 的 new-window 事件自 Electron 22 已移除，必须用 setWindowOpenHandler。
   win.webContents.on("did-attach-webview", (_event, guest) => {
+    // 0013：全局用户代理伪装。默认 webview UA 带 Electron/应用名尾巴，
+    // 知乎等站靠 UA 嗅探直接判“浏览器版本过低”（登录浮层弹窗即中招）。
+    // 此处洗成同版本纯 Chrome UA，主标签与浮层弹窗全覆盖；隔离分区不动。
+    try {
+      const base = guest.getUserAgent();
+      const spoofed = toChromeLikeUA(base);
+      if (spoofed !== base) guest.setUserAgent(spoofed);
+    } catch {
+      // 取不到 UA 时不挡后续挂载（window-open 拦截与右键菜单照常装）。
+    }
     guest.setWindowOpenHandler((details) => {
       win.webContents.send("mp:window-open", {
         url: details.url,

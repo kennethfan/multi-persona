@@ -142,6 +142,10 @@ body.side-dragging, body.side-dragging * { user-select: none !important; cursor:
   background: var(--accent-soft);
 }
 .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.tab-title {
+  flex: 1; min-width: 0; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
 .tab .close {
   border: none; background: none; cursor: pointer;
   color: var(--text-3); font-size: 14px; line-height: 1;

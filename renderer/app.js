@@ -135,10 +135,18 @@
     return n;
   }
 
+  function chromeLikeUA(base) {
+    if (!base) return base;
+    return base.replace(/\s+(Electron|multi-persona)\/[^\s]+/gi, "").replace(/\s{2,}/g, " ").trim();
+  }
+
   function makeWebview(instanceId, url) {
     var view = document.createElement("webview");
     view.setAttribute("partition", partitionFor(instanceId));
     view.setAttribute("allowpopups", "");
+    // 0013：首屏导航抢在主进程 did-attach 洗 UA 之前，先在属性层伪装，
+    // 否则首个请求与 navigator.userAgent 仍带 Electron 尾巴。主进程保留兜底。
+    try { view.setAttribute("useragent", chromeLikeUA(navigator.userAgent)); } catch (e) { /* 忽略 */ }
     if (url && url !== BLANK) view.setAttribute("src", url);
     view.addEventListener("did-attach", function () {
       try { window.mpAPI.registerWebview(view.getWebContentsId(), instanceId); } catch (e) { /* 忽略 */ }
@@ -154,7 +162,7 @@
     input.placeholder = "输入网址，回车打开";
     var go = el("button", "", "前往");
     // #26：重新加载按钮，与 Cmd+R 同语义（只重载活动标签）；点击不读/不提交输入框。
-    var reloadBtn = el("button", "", "⟳");
+    var reloadBtn = el("button", "reload-btn", "刷新");
     reloadBtn.title = "重新加载当前标签";
     // #36 Q3Q5：收藏按钮；☆=未收藏，★=已收藏（再点取消）；空白页禁用（Q6）。
     var starBtn = el("button", "bm-star", "☆");
@@ -297,7 +305,9 @@
       var dot = el("span", "dot");
       dot.style.background = c ? c.color : "#999";
       tab.appendChild(dot);
-      tab.appendChild(el("span", "", t.title || (t.url === BLANK ? "新标签页" : t.url)));
+      var fullTitle = t.title || (t.url === BLANK ? "新标签页" : t.url);
+      tab.title = fullTitle;
+      tab.appendChild(el("span", "tab-title", fullTitle));
       var x = el("button", "close", "×");
       x.onclick = function (e) { e.stopPropagation(); closeTab(t.id); };
       tab.appendChild(x);

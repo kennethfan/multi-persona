@@ -138,7 +138,19 @@ function watchDownloads(instanceId: string, storePath: string, settingsPath: str
 }
 
 /** ADR-0011：Cmd+R 只重载当前活动标签。覆盖默认菜单的 reload 整窗语义，原生 File/Edit/Window 保留。 */
+function sendToFocused(channel: string, payload?: unknown): void {
+  const win = BrowserWindow.getFocusedWindow();
+  if (win) win.webContents.send(channel, payload);
+}
+
 function buildAppMenu(): void {
+  // About 面板中文化：默认 appMenu 面板内容全英文，应用名/版本/版权/简介改为中文。
+  app.setAboutPanelOptions({
+    applicationName: "千岛",
+    applicationVersion: app.getVersion(),
+    copyright: "版权所有 © 2026 千岛",
+    credits: "多账号隔离的桌面浏览器",
+  });
   const viewSubmenu: Electron.MenuItemConstructorOptions[] = [
     {
       label: "重新加载当前标签",
@@ -150,8 +162,40 @@ function buildAppMenu(): void {
       },
     },
     { type: "separator" },
+    // #32 Q5：标签操作走菜单 accelerator（renderer 够不着 webview 内焦点）。
+    {
+      label: "当前实例新标签",
+      accelerator: "CmdOrCtrl+T",
+      click: () => sendToFocused("mp:new-tab"),
+    },
+    {
+      label: "关闭当前标签",
+      accelerator: "CmdOrCtrl+W",
+      click: () => sendToFocused("mp:close-active-tab"),
+    },
+    {
+      label: "上一个标签",
+      accelerator: "CmdOrCtrl+Shift+[",
+      click: () => sendToFocused("mp:switch-tab", { dir: -1 }),
+    },
+    {
+      label: "下一个标签",
+      accelerator: "CmdOrCtrl+Shift+]",
+      click: () => sendToFocused("mp:switch-tab", { dir: 1 }),
+    },
+    {
+      label: "聚焦地址栏",
+      accelerator: "CmdOrCtrl+L",
+      click: () => sendToFocused("mp:focus-addrbar"),
+    },
+    { type: "separator" },
     { role: "toggleDevTools" },
   ];
+  // #32 Q4：菜单帮助项直达设置页快捷键一节。
+  const helpMenu: Electron.MenuItemConstructorOptions = {
+    label: "帮助",
+    submenu: [{ label: "快捷键", click: () => sendToFocused("mp:show-shortcuts") }],
+  };
   const template: Electron.MenuItemConstructorOptions[] =
     process.platform === "darwin"
       ? [
@@ -160,12 +204,14 @@ function buildAppMenu(): void {
           { role: "editMenu" },
           { label: "视图", submenu: viewSubmenu },
           { role: "windowMenu" },
+          helpMenu,
         ]
       : [
           { role: "fileMenu" },
           { role: "editMenu" },
           { label: "视图", submenu: viewSubmenu },
           { role: "windowMenu" },
+          helpMenu,
         ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }

@@ -145,7 +145,11 @@
     input.value = tab.url === BLANK ? "" : tab.url;
     input.placeholder = "输入网址，回车打开";
     var go = el("button", "", "前往");
+    // #26：重新加载按钮，与 Cmd+R 同语义（只重载活动标签）；点击不读/不提交输入框。
+    var reloadBtn = el("button", "", "⟳");
+    reloadBtn.title = "重新加载当前标签";
     bar.appendChild(input);
+    bar.appendChild(reloadBtn);
     bar.appendChild(go);
     // defer=恢复期的空壳：先占位，首次可见时才设 src 真加载（ADR-0012 懒加载）。
     var view = makeWebview(tab.instanceId, defer ? null : tab.url);
@@ -177,6 +181,7 @@
     }
     go.onclick = submit;
     input.onkeydown = function (e) { if (e.key === "Enter") submit(); };
+    reloadBtn.onclick = function () { reloadActiveTab(); };
   }
 
   function renderSidebar() {
@@ -677,11 +682,12 @@
 
   window.mpAPI.onToast(showToast);
 
-  // ADR-0011：Cmd+R 只重载当前活动标签；无活动标签时静默无操作。
-  window.mpAPI.onReloadActiveTab(function () {
+  // ADR-0011：Cmd+R 只重载当前活动标签；无活动标签时静默无操作（#26 地址栏按钮复用同一语义）。
+  function reloadActiveTab() {
     var p = activeTabId ? panes[activeTabId] : null;
     if (p && p.view) { try { p.view.reload(); } catch (e) { /* 忽略 */ } }
-  });
+  }
+  window.mpAPI.onReloadActiveTab(function () { reloadActiveTab(); });
 
   window.mpAPI.onStoreChanged(function () {
   window.mpAPI.listStore().then(applyStore);

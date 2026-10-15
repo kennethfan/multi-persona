@@ -12,6 +12,15 @@
 
 ![账号1（qq）登录态](assets/screenshot2.png)
 
+## 功能特性
+
+- **多实例多开**：项目下挂多个实例，各自独立会话，同站多账号同时在线不串号。
+- **标签页**：地址栏跟随页面导航（含站内跳转）；`Cmd+R` / 地址栏 ⟳ 只重载当前活动标签；重启后标签自动恢复（懒加载）。
+- **页面区右键**：后退 / 前进 / 重新加载、链接在新标签打开·复制链接、图片另存为·复制图片地址、复制选中文字。
+- **下载中心**：顶栏下载图标 + 失败红点；下载记录面板含进度条、失败重试（自动续序号不覆盖）、打开所在文件夹；失败时 toast 即时提醒。
+- **下载目录**：应用级默认 + 实例级覆盖，不可用时回退系统默认并通知。
+- **账号标注**：实例标注重复时常驻红点 + 系统通知提醒。
+
 ## 快速开始
 
 ```bash
@@ -39,7 +48,7 @@ npm run dev
 
 ## 数据位置
 
-- macOS：`~/Library/Application Support/multi-persona/`（`projects.json` 元数据明文、`settings.json`、`Partitions/persist:mp-<实例id>/` 各实例会话）
+- macOS：`~/Library/Application Support/multi-persona/`（`projects.json` 元数据明文、`settings.json`、`tabs.db` 标签快照、`downloads.db` 下载记录、`Partitions/persist:mp-<实例id>/` 各实例会话）
 - Windows：`%APPDATA%/multi-persona/` 下同名结构
 
 ## 说明

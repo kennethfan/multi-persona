@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { Store } from "./project-store";
 import type { Settings } from "./settings";
+import type { TabsSnapshot } from "./tabs-db";
 
 /** 站内新窗口请求（主进程经 setWindowOpenHandler 拦截后转发）。 */
 export interface WindowOpenRequest {
@@ -54,6 +55,12 @@ export interface MpAPI {
   onMenuCommand(handler: (cmd: { cmd: string; kind: "project" | "instance" | "sidebar"; id: string }) => void): void;
   /** 读应用级设置（内存值）。 */
   getSettings(): Promise<Settings>;
+  /** 读标签快照（损坏返回空快照，界面层静默空启动）。 */
+  getTabsSnapshot(): Promise<TabsSnapshot>;
+  /** 写标签快照（全量覆盖；失败静默忽略）。 */
+  setTabsSnapshot(snap: TabsSnapshot): Promise<void>;
+  /** Cmd+R：主进程应用菜单转发，界面层只重载当前活动标签（ADR-0011）。 */
+  onReloadActiveTab(handler: () => void): void;
   /** 写应用级设置（合并回填后落盘，返回生效值）。 */
   setSettings(patch: Partial<Settings>): Promise<Settings>;
 }
@@ -108,6 +115,11 @@ contextBridge.exposeInMainWorld("mpAPI", {
     ipcRenderer.on("mp:menu-cmd", (_e, cmd) => handler(cmd));
   },
   getSettings: (): Promise<Settings> => ipcRenderer.invoke("settings:get"),
+  onReloadActiveTab: (handler: () => void): void => {
+    ipcRenderer.on("mp:reload-active-tab", () => handler());
+  },
   setSettings: (patch: Partial<Settings>): Promise<Settings> =>
     ipcRenderer.invoke("settings:set", patch),
+  getTabsSnapshot: (): Promise<TabsSnapshot> => ipcRenderer.invoke("tabs:get"),
+  setTabsSnapshot: (snap: TabsSnapshot): Promise<void> => ipcRenderer.invoke("tabs:set", snap),
 } satisfies MpAPI);

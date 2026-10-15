@@ -22,6 +22,8 @@
   var modalNodes = {};
   var dupIds = {};
   var settings = { newTabDefault: "current", popupBehavior: "modal", conflictNotify: true, downloadDir: "" };
+  // ADR-0012：启动恢复期间不落盘，避免半成品快照覆盖。
+  var restoring = true;
   var showingSettings = false;
   var settingsDraft = null;
 
@@ -129,27 +131,42 @@
     var view = document.createElement("webview");
     view.setAttribute("partition", partitionFor(instanceId));
     view.setAttribute("allowpopups", "");
-    if (url !== BLANK) view.setAttribute("src", url);
+    if (url && url !== BLANK) view.setAttribute("src", url);
     view.addEventListener("did-attach", function () {
       try { window.mpAPI.registerWebview(view.getWebContentsId(), instanceId); } catch (e) { /* 忽略 */ }
     });
     return view;
   }
 
-  function makePane(tab) {
+  function makePane(tab, defer) {
     var pane = el("div", "pane");
     var bar = el("div", "addrbar");
     var input = el("input");
     input.value = tab.url === BLANK ? "" : tab.url;
     input.placeholder = "输入网址，回车打开";
     var go = el("button", "", "前往");
+    // #26：重新加载按钮，与 Cmd+R 同语义（只重载活动标签）；点击不读/不提交输入框。
+    var reloadBtn = el("button", "", "⟳");
+    reloadBtn.title = "重新加载当前标签";
     bar.appendChild(input);
+    bar.appendChild(reloadBtn);
     bar.appendChild(go);
-    var view = makeWebview(tab.instanceId, tab.url);
+    // defer=恢复期的空壳：先占位，首次可见时才设 src 真加载（ADR-0012 懒加载）。
+    var view = makeWebview(tab.instanceId, defer ? null : tab.url);
     view.addEventListener("page-title-updated", function (e) {
       tab.title = e.title;
       renderTabbar();
     });
+    // ADR-0010：地址栏跟随已提交导航（整页/302 走 did-navigate，SPA pushState/hash 走 did-navigate-in-page）。
+    function syncUrl(url) {
+      if (!url) return;
+      tab.url = url;
+      // 用户正在输入时不抢输入框，失焦后下次对齐。
+      if (document.activeElement !== input) input.value = url === BLANK ? "" : url;
+      renderTabbar();
+    }
+    view.addEventListener("did-navigate", function (e) { syncUrl(e.url); });
+    view.addEventListener("did-navigate-in-page", function (e) { syncUrl(e.url); });
     pane.appendChild(bar);
     pane.appendChild(view);
     document.getElementById("views").insertBefore(pane, document.getElementById("modal-layer"));
@@ -164,6 +181,7 @@
     }
     go.onclick = submit;
     input.onkeydown = function (e) { if (e.key === "Enter") submit(); };
+    reloadBtn.onclick = function () { reloadActiveTab(); };
   }
 
   function renderSidebar() {
@@ -247,6 +265,7 @@
         p.pane.style.display = "flex";
         p.pane.style.order = String(visible[id]);
         anyVisible = true;
+        ensureTabLoaded(id);
       } else {
         p.pane.style.display = "none";
       }
@@ -294,6 +313,7 @@
     renderTabbar();
     layout();
     renderModals();
+    saveTabs();
   }
 
   function promptDialog(opts) {
@@ -370,8 +390,61 @@
     promise.then(function (s) { if (s) applyStore(s); });
   }
 
-  function reloadInstanceTabs(instanceId) {
-    tabs.forEach(function (t) {
+  // ADR-0012：每次 render 后落盘（单点覆盖全部变更：开/关/切换/导航/存储过滤）。
+  function saveTabs() {
+    if (restoring) return;
+    var entries = tabs.map(function (t) { return { url: t.url, instanceId: t.instanceId }; });
+    var activePos = -1;
+    for (var i = 0; i < tabs.length; i++) {
+      if (tabs[i].id === activeTabId) { activePos = i; break; }
+    }
+    try {
+      var r = window.mpAPI.setTabsSnapshot({ tabs: entries, activePos: activePos, currentInstanceId: currentInstanceId });
+      if (r && typeof r.catch === "function") r.catch(function () { /* 落盘失败不影响当前会话 */ });
+    } catch (e) { /* 忽略 */ }
+  }
+
+  // ADR-0012：可见标签首次补 src 真加载；空壳 pane（恢复期）靠它变实。
+  function ensureTabLoaded(id) {
+    var t = id ? tabOf(id) : null;
+    var p = id ? panes[id] : null;
+    if (!t || !p || !p.view) return;
+    try {
+      if (!p.view.getAttribute("src") && t.url !== BLANK) p.view.setAttribute("src", t.url);
+    } catch (e) { /* 忽略 */ }
+  }
+
+  // ADR-0012：按位置恢复（id 会话内有效不持久化）；实例已删的条目丢弃；恢复完才允许落盘。
+  function restoreTabs(snap) {
+    var entries = (snap && snap.tabs) || [];
+    var wantPos = (snap && typeof snap.activePos === "number") ? snap.activePos : -1;
+    var kept = 0;
+    entries.forEach(function (e, i) {
+      if (!instanceOf(e.instanceId)) return;
+      tabSeq += 1;
+      var tab = { id: "t-" + tabSeq, instanceId: e.instanceId, url: e.url || BLANK, title: "" };
+      tabs.push(tab);
+      makePane(tab, true);
+      if (i === wantPos) activeTabId = tab.id;
+      kept += 1;
+    });
+    if (snap && snap.currentInstanceId && instanceOf(snap.currentInstanceId)) {
+      currentInstanceId = snap.currentInstanceId;
+    }
+    if (kept > 0 && !tabOf(activeTabId)) {
+      var recent = null;
+      for (var i = tabs.length - 1; i >= 0; i--) {
+        if (tabs[i].instanceId === currentInstanceId) { recent = tabs[i].id; break; }
+      }
+      activeTabId = recent || tabs[tabs.length - 1].id;
+    }
+    restoring = false;
+    render();
+    ensureTabLoaded(activeTabId);
+    saveTabs();
+  }
+
+  function reloadInstanceTabs(instanceId) {    tabs.forEach(function (t) {
       if (t.instanceId !== instanceId) return;
       var p = panes[t.id];
       if (p && p.view) { try { p.view.reload(); } catch (e) { /* 忽略 */ } }
@@ -609,10 +682,25 @@
 
   window.mpAPI.onToast(showToast);
 
+  // ADR-0011：Cmd+R 只重载当前活动标签；无活动标签时静默无操作（#26 地址栏按钮复用同一语义）。
+  function reloadActiveTab() {
+    var p = activeTabId ? panes[activeTabId] : null;
+    if (p && p.view) { try { p.view.reload(); } catch (e) { /* 忽略 */ } }
+  }
+  window.mpAPI.onReloadActiveTab(function () { reloadActiveTab(); });
+
   window.mpAPI.onStoreChanged(function () {
   window.mpAPI.listStore().then(applyStore);
   window.mpAPI.getSettings().then(function (s) { settings = s; });
   });
 
-  window.mpAPI.listStore().then(applyStore);
+  // 启动：先拉存储建索引，再拉快照恢复标签（恢复期 render 不落盘）。
+  window.mpAPI.listStore().then(function (store) {
+    applyStore(store);
+    return window.mpAPI.getTabsSnapshot();
+  }).then(function (snap) {
+    restoreTabs(snap);
+  }, function () {
+    restoreTabs(null);
+  });
 })();

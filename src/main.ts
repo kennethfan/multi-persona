@@ -29,6 +29,8 @@ import {
 } from "./settings";
 import type { Settings } from "./settings";
 import { createWindowOptions } from "./window-config";
+import { loadTabsSnapshot, resolveTabsDbPath, saveTabsSnapshot } from "./tabs-db";
+import type { TabsSnapshot } from "./tabs-db";
 
 /** guest webContents id → 所属实例 id（渲染进程在 webview did-attach 后上报）。 */
 const webviewInstances = new Map<number, string>();
@@ -98,8 +100,40 @@ function watchDownloads(instanceId: string, storePath: string, settingsPath: str
     );
 }
 
-function createMainWindow(): BrowserWindow {
-  const win = new BrowserWindow(createWindowOptions());
+/** ADR-0011：Cmd+R 只重载当前活动标签。覆盖默认菜单的 reload 整窗语义，原生 File/Edit/Window 保留。 */
+function buildAppMenu(): void {
+  const viewSubmenu: Electron.MenuItemConstructorOptions[] = [
+    {
+      label: "重新加载当前标签",
+      accelerator: "CmdOrCtrl+R",
+      click: (_item, focusedWindow) => {
+        if (focusedWindow instanceof BrowserWindow) {
+          focusedWindow.webContents.send("mp:reload-active-tab");
+        }
+      },
+    },
+    { type: "separator" },
+    { role: "toggleDevTools" },
+  ];
+  const template: Electron.MenuItemConstructorOptions[] =
+    process.platform === "darwin"
+      ? [
+          { role: "appMenu" },
+          { role: "fileMenu" },
+          { role: "editMenu" },
+          { label: "视图", submenu: viewSubmenu },
+          { role: "windowMenu" },
+        ]
+      : [
+          { role: "fileMenu" },
+          { role: "editMenu" },
+          { label: "视图", submenu: viewSubmenu },
+          { role: "windowMenu" },
+        ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+function createMainWindow(): BrowserWindow {  const win = new BrowserWindow(createWindowOptions());
   // 站内全部新窗口请求在此拦截：一律 deny 原生窗口，转界面层开应用内标签/modal。
   // 注意：<webview> 的 new-window 事件自 Electron 22 已移除，必须用 setWindowOpenHandler。
   win.webContents.on("did-attach-webview", (_event, guest) => {
@@ -136,6 +170,13 @@ void app.whenReady().then(() => {
     settings = withDefaults({ ...settings, ...patch });
     saveSettingsFile(settingsPath, settings);
     return settings;
+  });
+
+  // 标签快照：renderer 变化即推，启动时拉（ADR-0012，sqlite，损坏静默空启动）。
+  const tabsDbPath = resolveTabsDbPath(userData);
+  ipcMain.handle("tabs:get", () => loadTabsSnapshot(tabsDbPath));
+  ipcMain.handle("tabs:set", (_event, snap: TabsSnapshot) => {
+    saveTabsSnapshot(tabsDbPath, snap);
   });
 
   // renderer 只读存储；上报 webview 与实例的配对。
@@ -298,10 +339,10 @@ void app.whenReady().then(() => {
     },
   );
 
+  buildAppMenu();
   createMainWindow();
 
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
+  app.on("activate", () => {    if (BrowserWindow.getAllWindows().length === 0) {
       createMainWindow();
     }
   });

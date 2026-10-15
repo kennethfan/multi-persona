@@ -226,6 +226,8 @@ webview { flex: 1; }
   background: var(--bg-panel); color: var(--text); outline: none; width: 100%;
 }
 .prompt input:focus, .prompt select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.prompt-detail { margin: 0; font-size: 12px; color: #6b7a8d; word-break: break-all; }
+.settings .prompt-detail { margin-top: 4px; }
 .palette { display: flex; gap: 8px; flex-wrap: wrap; }
 .swatch {
   width: 26px; height: 26px; border-radius: 50%; cursor: pointer;

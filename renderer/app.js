@@ -21,7 +21,7 @@
   var panes = {};
   var modalNodes = {};
   var dupIds = {};
-  var settings = { newTabDefault: "current", popupBehavior: "modal", conflictNotify: true, downloadDir: "" };
+  var settings = { newTabDefault: "current", popupBehavior: "modal", conflictNotify: true, downloadDir: "", customUA: "" };
   // ADR-0012：启动恢复期间不落盘，避免半成品快照覆盖。
   var restoring = true;
   var showingSettings = false;
@@ -140,13 +140,22 @@
     return base.replace(/\s+(Electron|multi-persona)\/[^\s]+/gi, "").replace(/\s{2,}/g, " ").trim();
   }
 
+  // 0014：与主进程 resolveUA 同序（实例覆盖→全局自定义→纯 Chrome 伪装）。
+  // 主进程是最终裁决（did-attach/register 双重设），这里只决定首屏属性值。
+  function effectiveUA(instanceId) {
+    var node = instanceId ? instanceOf(instanceId) : null;
+    if (node && node.userAgentOverride) return node.userAgentOverride;
+    if (settings.customUA) return settings.customUA;
+    return chromeLikeUA(navigator.userAgent);
+  }
+
   function makeWebview(instanceId, url) {
     var view = document.createElement("webview");
     view.setAttribute("partition", partitionFor(instanceId));
     view.setAttribute("allowpopups", "");
     // 0013：首屏导航抢在主进程 did-attach 洗 UA 之前，先在属性层伪装，
     // 否则首个请求与 navigator.userAgent 仍带 Electron 尾巴。主进程保留兜底。
-    try { view.setAttribute("useragent", chromeLikeUA(navigator.userAgent)); } catch (e) { /* 忽略 */ }
+    try { view.setAttribute("useragent", effectiveUA(instanceId)); } catch (e) { /* 忽略 */ }
     if (url && url !== BLANK) view.setAttribute("src", url);
     view.addEventListener("did-attach", function () {
       try { window.mpAPI.registerWebview(view.getWebContentsId(), instanceId); } catch (e) { /* 忽略 */ }
@@ -387,6 +396,8 @@
       overlay.innerHTML = "";
       var box = el("div", "prompt");
       box.appendChild(el("h3", "", opts.title));
+      // 0014：detail 只读说明行（生效 UA 回显用）；allowEmpty 允许提交空字串（清空=跟随全局）。
+      if (opts.detail) box.appendChild(el("p", "prompt-detail", opts.detail));
       var input = null;
       var select = null;
       if (opts.choices) {
@@ -437,7 +448,7 @@
       ok.onclick = function () {
         if (select) { done({ choice: select.value }); return; }
         var v = input ? input.value.trim() : "";
-        if (input && !v) { input.focus(); return; }
+        if (input && !v && !opts.allowEmpty) { input.focus(); return; }
         done({ value: v, color: color });
       };
       cancel.onclick = function () { done(null); };
@@ -516,6 +527,13 @@
     });
   }
 
+  function reloadAllTabs() {
+    tabs.forEach(function (t) {
+      var p = panes[t.id];
+      if (p && p.view) { try { p.view.reload(); } catch (e) { /* 忽略 */ } }
+    });
+  }
+
   window.mpAPI.onMenuCommand(function (m) {
     if (m.cmd === "new-project") {
       promptDialog({ title: "新建项目", placeholder: "项目名", withPalette: true })
@@ -560,6 +578,22 @@
           });
         });
       });
+    } else if (m.cmd === "set-user-agent" && m.kind === "instance") {
+      var cur = node.userAgentOverride || "";
+      var eff = cur || settings.customUA || chromeLikeUA(navigator.userAgent);
+      var src = node.userAgentOverride ? "实例专属" : (settings.customUA ? "跟随全局" : "纯 Chrome 伪装");
+      promptDialog({ title: "设置实例“" + node.name + "”的 UA", initial: cur, placeholder: "留空=跟随全局", allowEmpty: true, detail: "当前生效（" + src + "）：" + eff })
+        .then(function (r) {
+          if (!r) return;
+          window.mpAPI.setUserAgent(m.id, r.value).then(function (s) {
+            if (s) applyStore(s);
+            window.mpAPI.confirm({
+              message: "立即重载该实例标签页使新 UA 生效？",
+              detail: "UA 只对新导航生效，已打开页面需重载。",
+              okLabel: "立即重载",
+            }).then(function (yes) { if (yes) reloadInstanceTabs(m.id); });
+          });
+        });
     } else if (m.cmd === "clear-cache" && m.kind === "instance") {
       window.mpAPI.confirm({
         message: "清除实例“" + node.name + "”的缓存？",
@@ -608,7 +642,7 @@
 
   function showSettings() {
     showingSettings = true;
-    settingsDraft = { newTabDefault: settings.newTabDefault, popupBehavior: settings.popupBehavior, conflictNotify: settings.conflictNotify, downloadDir: settings.downloadDir || "" };
+    settingsDraft = { newTabDefault: settings.newTabDefault, popupBehavior: settings.popupBehavior, conflictNotify: settings.conflictNotify, downloadDir: settings.downloadDir || "", customUA: settings.customUA || "" };
     renderSettingsView();
     document.getElementById("views").style.display = "none";
     document.getElementById("settings-wrap").hidden = false;
@@ -665,12 +699,38 @@
     dlRow.appendChild(pick);
     dlRow.appendChild(resetDl);
     l4.appendChild(dlRow);
+    // 0014：全局自定义 UA（Q2 手工输入；留空=纯 Chrome 伪装；输入即更新生效回显 Q8）。
+    var l5 = el("label", "", "全局自定义 UA（留空=伪装纯 Chrome）");
+    var uaInput = document.createElement("input");
+    uaInput.value = d.customUA || "";
+    uaInput.placeholder = "如：Mozilla/5.0 … Chrome/140 …";
+    var uaEff = el("div", "prompt-detail", "");
+    function refreshUaEff() {
+      var v = d.customUA || chromeLikeUA(navigator.userAgent);
+      uaEff.textContent = "当前生效（" + (d.customUA ? "全局自定义" : "纯 Chrome 伪装") + "）：" + v;
+    }
+    uaInput.oninput = function () { d.customUA = uaInput.value.trim(); refreshUaEff(); };
+    refreshUaEff();
+    l5.appendChild(uaInput);
+    l5.appendChild(uaEff);
     var row = el("div", "row");
     var back = el("button", "", "返回");
     back.onclick = exitSettings;
     var save = el("button", "", "保存");
     save.onclick = function () {
-      window.mpAPI.setSettings(d).then(function (s) { settings = s; exitSettings(); });
+      var oldUA = settings.customUA || "";
+      window.mpAPI.setSettings(d).then(function (s) {
+        settings = s;
+        exitSettings();
+        // 0014 Q4：UA 只对新导航生效，变更后二次确认是否重载全部标签。
+        if ((s.customUA || "") !== oldUA) {
+          window.mpAPI.confirm({
+            message: "全局 UA 已更改，立即重载全部标签页？",
+            detail: "UA 只对新导航生效，已打开页面需重载。",
+            okLabel: "全部重载",
+          }).then(function (yes) { if (yes) reloadAllTabs(); });
+        }
+      });
     };
     row.appendChild(back);
     row.appendChild(save);
@@ -678,6 +738,7 @@
     box.appendChild(l2);
     box.appendChild(l3);
     box.appendChild(l4);
+    box.appendChild(l5);
     // #32 Q4Q8：快捷键静态表 + 引导常驻入口。
     var sc = el("div", "");
     sc.id = "shortcuts-sec";

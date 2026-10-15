@@ -20,6 +20,7 @@ describe("withDefaults", () => {
         sidebarWidth: 200,
         sidebarCollapsed: true,
         bookmarksCollapsed: true,
+        customUA: "Custom/1.0",
       }),
     ).toEqual({
       newTabDefault: "ask",
@@ -30,6 +31,7 @@ describe("withDefaults", () => {
       sidebarWidth: 200,
       sidebarCollapsed: true,
       bookmarksCollapsed: true,
+      customUA: "Custom/1.0",
     });
   });
   it("非法值回退默认", () => {
@@ -52,6 +54,13 @@ describe("withDefaults", () => {
     expect(
       withDefaults({ onboarded: "yes" } as unknown as Partial<Settings>).onboarded,
     ).toBe(false);
+  });
+  it("customUA 缺字段回空字串（未设置），非字符串回默认", () => {
+    expect(withDefaults({}).customUA).toBe("");
+    expect(
+      withDefaults({ customUA: 42 } as unknown as Partial<Settings>).customUA,
+    ).toBe("");
+    expect(withDefaults({ customUA: "Custom/1.0" }).customUA).toBe("Custom/1.0");
   });
   it("sidebarWidth 缺字段回 148，越界钳制 120–400，非数字回默认", () => {
     expect(withDefaults({}).sidebarWidth).toBe(148);

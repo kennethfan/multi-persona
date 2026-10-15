@@ -15,6 +15,7 @@ export type MenuCmd =
   | "recolor"
   | "set-label"
   | "set-download-dir"
+  | "set-user-agent"
   | "clear-cache"
   | "clear-data"
   | "delete";
@@ -23,7 +24,7 @@ export type MenuCmd =
 export function buildMenuCommands(kind: TreeNodeKind): MenuCmd[] {
   if (kind === "sidebar") return ["new-project"];
   if (kind === "project") return ["new-instance", "rename", "recolor", "delete"];
-  return ["new-instance-here", "rename", "recolor", "set-label", "set-download-dir", "clear-cache", "clear-data", "delete"];
+  return ["new-instance-here", "rename", "recolor", "set-label", "set-download-dir", "set-user-agent", "clear-cache", "clear-data", "delete"];
 }
 
 /** 命令展示文案（delete 按节点类型区分，提醒级联/清会话后果）。 */
@@ -43,6 +44,8 @@ export function menuLabel(cmd: MenuCmd, kind: TreeNodeKind): string {
       return "标注账号";
     case "set-download-dir":
       return "设置下载目录";
+    case "set-user-agent":
+      return "设置 UA…";
     case "clear-cache":
       return "清除缓存";
     case "clear-data":

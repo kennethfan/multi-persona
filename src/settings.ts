@@ -19,6 +19,8 @@ export interface Settings {
   sidebarCollapsed: boolean;
   /** 书签区收起状态（#36 跟进折叠，默认展开）。 */
   bookmarksCollapsed: boolean;
+  /** 全局自定义 UA；空字串=未设置，按 UA 回退链取值（ADR-0014）。 */
+  customUA: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -30,6 +32,7 @@ export const DEFAULT_SETTINGS: Settings = {
   sidebarWidth: 148,
   sidebarCollapsed: false,
   bookmarksCollapsed: false,
+  customUA: "",
 };
 
 /** 缺字段回填默认值，非法值回退默认（老版本 settings.json 直接可用）。 */
@@ -44,6 +47,7 @@ export function withDefaults(raw: Partial<Settings>): Settings {
     sidebarWidth: Number.isFinite(w) ? Math.min(400, Math.max(120, w)) : 148,
     sidebarCollapsed: raw.sidebarCollapsed === true,
     bookmarksCollapsed: raw.bookmarksCollapsed === true,
+    customUA: typeof raw.customUA === "string" ? raw.customUA : "",
   };
 }
 

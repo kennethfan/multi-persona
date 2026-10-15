@@ -14,3 +14,30 @@ export function toChromeLikeUA(baseUA: string): string {
   if (!baseUA) return baseUA;
   return baseUA.replace(STRIP_PATTERN, "").replace(/\s{2,}/g, " ").trim();
 }
+
+/**
+ * UA 回退链（ADR-0014）：实例自定义 → 全局自定义 → 纯 Chrome 伪装。
+ * 空白（含全空格）视为未设置，自动用下一级。
+ */
+export function resolveUA(
+  instanceOverride: string | undefined,
+  globalCustom: string | undefined,
+  baseUA: string,
+): string {
+  if (instanceOverride && instanceOverride.trim()) return instanceOverride.trim();
+  if (globalCustom && globalCustom.trim()) return globalCustom.trim();
+  return toChromeLikeUA(baseUA);
+}
+
+/**
+ * 手输 UA 入库前清洗：去首尾空格；含换行/回车/C0 控制字符抛错
+ * （否则 HTTP 请求头非法，整站请求失败）；空串合法=未设置。
+ */
+export function sanitizeUA(input: string): string {
+  const trimmed = (input ?? "").trim();
+  // eslint-disable-next-line no-control-regex
+  if (/[\r\n\x00-\x1f\x7f]/.test(trimmed)) {
+    throw new Error("UA 不能包含换行或控制字符");
+  }
+  return trimmed;
+}

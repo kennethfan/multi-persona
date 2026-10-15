@@ -20,6 +20,7 @@ import {
   renameProject,
   setInstanceDownloadDir,
   setInstanceLabel,
+  setInstanceUserAgent,
   wrapProjects,
 } from "./projects";
 import {
@@ -171,6 +172,24 @@ describe("实例下载目录覆盖", () => {
   it("id 不存在抛错", () => {
     const list = createDefaultInstances(createDefaultProjects());
     expect(() => setInstanceDownloadDir(list, "nope", "/tmp/dl")).toThrow();
+  });
+});
+
+describe("实例 UA 覆盖", () => {
+  it("设置覆盖；空白=清除覆盖（删字段，恢复跟随全局）", () => {
+    let list = createDefaultInstances(createDefaultProjects());
+    expect(getInstance(list, "default-1-i1")?.userAgentOverride).toBeUndefined();
+    list = setInstanceUserAgent(list, "default-1-i1", "  Custom/1.0  ");
+    expect(getInstance(list, "default-1-i1")?.userAgentOverride).toBe("Custom/1.0");
+    list = setInstanceUserAgent(list, "default-1-i1", "   ");
+    expect(getInstance(list, "default-1-i1")?.userAgentOverride).toBeUndefined();
+    expect("userAgentOverride" in (getInstance(list, "default-1-i1") as object)).toBe(false);
+  });
+
+  it("含换行抛错；id 不存在抛错", () => {
+    const list = createDefaultInstances(createDefaultProjects());
+    expect(() => setInstanceUserAgent(list, "default-1-i1", "Custom/1.0\nEvil: 1")).toThrow();
+    expect(() => setInstanceUserAgent(list, "nope", "Custom/1.0")).toThrow();
   });
 });
 

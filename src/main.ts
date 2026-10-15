@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, Notification, clipboard, dialog, ipcMain, session, shell } from "electron";
+import { app, BrowserWindow, Menu, Notification, clipboard, dialog, ipcMain, session, shell, webContents } from "electron";
 import type { DownloadItem } from "electron";
 import path from "node:path";
 import { decideDownloadPath } from "./downloads";
@@ -16,6 +16,7 @@ import {
   renameProject,
   setInstanceDownloadDir,
   setInstanceLabel,
+  setInstanceUserAgent,
 } from "./projects";
 import { buildGuestMenuCommands, buildMenuCommands, guestMenuLabel, menuLabel } from "./menus";
 import type { GuestCmd, GuestContext, MenuCmd, TreeNodeKind } from "./menus";
@@ -29,7 +30,7 @@ import {
 } from "./settings";
 import type { Settings } from "./settings";
 import { createWindowOptions } from "./window-config";
-import { toChromeLikeUA } from "./user-agent";
+import { resolveUA } from "./user-agent";
 import { loadTabsSnapshot, resolveTabsDbPath, saveTabsSnapshot } from "./tabs-db";
 import type { TabsSnapshot } from "./tabs-db";
 import { loadBookmarks, resolveBookmarksDbPath, saveBookmarks } from "./bookmarks-db";
@@ -260,20 +261,31 @@ function buildGuestMenuItem(
   }
 }
 
-function createMainWindow(): BrowserWindow {  const win = new BrowserWindow(createWindowOptions());
-  // 站内全部新窗口请求在此拦截：一律 deny 原生窗口，转界面层开应用内标签/modal。
-  // 注意：<webview> 的 new-window 事件自 Electron 22 已移除，必须用 setWindowOpenHandler。
-  win.webContents.on("did-attach-webview", (_event, guest) => {
-    // 0013：全局用户代理伪装。默认 webview UA 带 Electron/应用名尾巴，
-    // 知乎等站靠 UA 嗅探直接判“浏览器版本过低”（登录浮层弹窗即中招）。
-    // 此处洗成同版本纯 Chrome UA，主标签与浮层弹窗全覆盖；隔离分区不动。
+function createMainWindow(deps: { storePath: string; getSettings: () => Settings }): BrowserWindow {
+  const win = new BrowserWindow(createWindowOptions());
+  // UA 回退链（ADR-0014）：实例覆盖 → 全局自定义 → 纯 Chrome 伪装。
+  // attach 时配对可能未上报（renderer did-attach 先后不定），只按已知算；
+  // mp:webview-register 回调里再按完整链重算一次，保证实例覆盖不丢。
+  function applyUA(guest: Electron.WebContents, instanceId: string): void {
     try {
       const base = guest.getUserAgent();
-      const spoofed = toChromeLikeUA(base);
-      if (spoofed !== base) guest.setUserAgent(spoofed);
+      let override: string | undefined;
+      if (instanceId) {
+        override = loadStore(deps.storePath).instances.find((c) => c.id === instanceId)?.userAgentOverride;
+      }
+      const ua = resolveUA(override, deps.getSettings().customUA, base);
+      if (ua !== base) guest.setUserAgent(ua);
     } catch {
       // 取不到 UA 时不挡后续挂载（window-open 拦截与右键菜单照常装）。
     }
+  }
+  // 站内全部新窗口请求在此拦截：一律 deny 原生窗口，转界面层开应用内标签/modal。
+  // 注意：<webview> 的 new-window 事件自 Electron 22 已移除，必须用 setWindowOpenHandler。
+  win.webContents.on("did-attach-webview", (_event, guest) => {
+    // 0013 起源：默认 webview UA 带 Electron/应用名尾巴，
+    // 知乎等站靠 UA 嗅探直接判“浏览器版本过低”（登录浮层弹窗即中招）。
+    // 此处按回退链取值，主标签与浮层弹窗全覆盖；隔离分区不动。
+    applyUA(guest, webviewInstances.get(guest.id) ?? "");
     guest.setWindowOpenHandler((details) => {
       win.webContents.send("mp:window-open", {
         url: details.url,
@@ -355,10 +367,22 @@ void app.whenReady().then(() => {
     shell.openPath(path.dirname(savePath));
   });
 
-  // renderer 只读存储；上报 webview 与实例的配对。
+  // renderer 只读存储；上报 webview 与实例的配对（配对落定后按完整 UA 回退链重算一次）。
   ipcMain.handle("store:list", () => loadStore(storePath));
   ipcMain.on("mp:webview-register", (_event, webContentsId: number, instanceId: string) => {
     webviewInstances.set(webContentsId, instanceId);
+    try {
+      const guest = webContents.fromId(webContentsId);
+      if (guest && !guest.isDestroyed()) {
+        const store = loadStore(storePath);
+        const override = store.instances.find((c) => c.id === instanceId)?.userAgentOverride;
+        const base = guest.getUserAgent();
+        const ua = resolveUA(override, settings.customUA, base);
+        if (ua !== base) guest.setUserAgent(ua);
+      }
+    } catch {
+      // 重算失败不影响配对本身，下次导航 attach 逻辑照常。
+    }
   });
   // 删实例：先清分区存储（含登录态），再删元数据落盘。
   // 顺序不能反——wipe 失败时元数据还在、可重试；反过来会留下清不掉的孤儿会话。
@@ -409,6 +433,14 @@ void app.whenReady().then(() => {
   ipcMain.handle("store:set-download-dir", (_event, instanceId: string, dir: string) => {
     const store = loadStore(storePath);
     store.instances = setInstanceDownloadDir(store.instances, instanceId, dir);
+    saveStore(storePath, store);
+    broadcastStoreChanged();
+    return store;
+  });
+  // 实例 UA 覆盖：空字串=清除覆盖（恢复跟随全局）；换行/控制字符抛错。
+  ipcMain.handle("store:set-user-agent", (_event, instanceId: string, userAgent: string) => {
+    const store = loadStore(storePath);
+    store.instances = setInstanceUserAgent(store.instances, instanceId, userAgent);
     saveStore(storePath, store);
     broadcastStoreChanged();
     return store;
@@ -516,10 +548,10 @@ void app.whenReady().then(() => {
   );
 
   buildAppMenu();
-  createMainWindow();
+  createMainWindow({ storePath, getSettings: () => settings });
 
   app.on("activate", () => {    if (BrowserWindow.getAllWindows().length === 0) {
-      createMainWindow();
+      createMainWindow({ storePath, getSettings: () => settings });
     }
   });
 });

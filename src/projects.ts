@@ -2,6 +2,7 @@
  * 项目（分组）与实例（会话单元）元数据（纯数据；会话隔离见 sessions，分区清除见 T5）。
  * ADR-0007：隔离单元从项目下沉到实例，项目只做分组。
  */
+import { sanitizeUA } from "./user-agent";
 export interface Project {
   id: string;
   /** 展示名，同一列表内不强制唯一。 */
@@ -22,6 +23,8 @@ export interface Instance {
   label?: string;
   /** 专属下载目录；缺失或空白=跟随全局（应用默认下载目录）。 */
   downloadDir?: string;
+  /** 实例 UA 覆盖；缺失或空白=跟随全局（ADR-0014）。 */
+  userAgentOverride?: string;
 }
 
 /** 首次启动预置的 5 个空项目：名字与颜色各不相同。 */
@@ -146,6 +149,24 @@ export function setInstanceDownloadDir(list: Instance[], id: string, dir: string
       return rest;
     }
     return { ...c, downloadDir: trimmed };
+  });
+  if (!found) throw new Error(`实例不存在: ${id}`);
+  return next;
+}
+
+/** 实例 UA 覆盖（ADR-0014）；id 不存在时抛错。空字串=清除覆盖（跟随全局）；换行/控制字符抛错。 */
+export function setInstanceUserAgent(list: Instance[], id: string, ua: string): Instance[] {
+  const trimmed = sanitizeUA(ua);
+  let found = false;
+  const next = list.map((c) => {
+    if (c.id !== id) return c;
+    found = true;
+    if (!trimmed) {
+      const rest = { ...c };
+      delete rest.userAgentOverride;
+      return rest;
+    }
+    return { ...c, userAgentOverride: trimmed };
   });
   if (!found) throw new Error(`实例不存在: ${id}`);
   return next;

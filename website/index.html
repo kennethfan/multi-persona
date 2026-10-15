@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>千岛 — 同一网站，多账号同时在线</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="hero">
+  <h1>千岛</h1>
+  <p class="tagline">同一网站多登录身份同时在线、互不串号的桌面应用（Electron，macOS + Windows）。</p>
+  <p class="cta">
+    <a class="btn" href="https://github.com/kennethfan/multi-persona/releases">下载最新版</a>
+    <a class="btn ghost" href="https://github.com/kennethfan/multi-persona">GitHub 仓库</a>
+  </p>
+  <div class="shots">
+    <figure><img src="assets/screenshot1.png" alt="账号2登录态截图"><figcaption>账号2（163）登录态</figcaption></figure>
+    <figure><img src="assets/screenshot2.png" alt="账号1登录态截图"><figcaption>账号1（qq）登录态</figcaption></figure>
+  </div>
+</header>
+
+<section>
+  <h2>组织模型</h2>
+  <p>项目是分组，实例是隔离的会话空间：一个实例登一个账号，同站多账号互不串号；标签页归属实例。</p>
+</section>
+
+<section>
+  <h2>功能亮点</h2>
+  <div class="cards">
+    <div class="card"><h3>多实例多开</h3><p>项目下挂多个实例，各自独立会话，同站多账号同时在线不串号。</p></div>
+    <div class="card"><h3>标签·地址栏·分屏·弹窗</h3><p>地址栏跟随页面导航；Cmd+R 只重载当前标签；重启后标签懒加载恢复；分屏同实例并排看两页；站内新窗口进应用内弹窗或标签。</p></div>
+    <div class="card"><h3>页面区右键</h3><p>后退 / 前进 / 重新加载，链接新标签打开·复制链接，图片另存为·复制图片地址，复制选中文字。</p></div>
+    <div class="card"><h3>下载中心</h3><p>顶栏下载按钮 + 失败红点；记录面板含进度条、失败重试（自动续序号不覆盖）、打开所在文件夹；失败 toast 即时提醒。</p></div>
+    <div class="card"><h3>两级下载目录</h3><p>应用级默认 + 实例级覆盖，不可用时回退系统默认并通知。</p></div>
+    <div class="card"><h3>书签</h3><p>地址栏 ☆ 收藏，在归属实例新标签打开；归属实例已删回退当前实例。</p></div>
+    <div class="card"><h3>账号标注防串号</h3><p>实例标注重复时常驻红点 + 系统通知提醒。</p></div>
+    <div class="card"><h3>引导·设置·快捷键</h3><p>首启引导页讲清项目→实例→标签；设置页草稿制；Cmd+T/W、Cmd+Shift+[ / ]、Cmd+L、Cmd+R 开箱即用。</p></div>
+  </div>
+</section>
+
+<section>
+  <h2>快速开始</h2>
+  <ol>
+    <li>左栏右键空白处 → 新建项目；右键项目 → 新建实例（一个账号建一个实例）。</li>
+    <li>在实例里打开网站并登录；不同实例同站登录互不串号。</li>
+    <li>开发者本地启动：<code>npm install</code> 后 <code>npm run dev</code>。</li>
+  </ol>
+  <pre><code>npm install
+npm run dev</code></pre>
+</section>
+
+<section>
+  <h2>数据与隐私</h2>
+  <p>每个实例独占持久化分区，删实例先清分区再删元数据。数据位置：macOS <code>~/Library/Application Support/multi-persona/</code>，Windows <code>%APPDATA%/multi-persona/</code>。</p>
+</section>
+
+<footer>
+  <a href="https://github.com/kennethfan/multi-persona/blob/dev/README.md">详细功能说明（README）</a>
+  <a href="https://github.com/kennethfan/multi-persona/blob/dev/CONTEXT.md">术语与决策（CONTEXT.md）</a>
+  <a href="https://github.com/kennethfan/multi-persona/issues">GitHub Issues</a>
+</footer>
+</body>
+</html>

@@ -618,6 +618,28 @@
     box.appendChild(l2);
     box.appendChild(l3);
     box.appendChild(l4);
+    // #32 Q4Q8：快捷键静态表 + 引导常驻入口。
+    var sc = el("div", "");
+    sc.id = "shortcuts-sec";
+    sc.appendChild(el("h4", "", "快捷键"));
+    // #33：修饰键按平台显示（mac Cmd，其余 Ctrl），与菜单 accelerator 实际生效一致。
+    var mod = "Ctrl";
+    try { if (window.mpAPI.platform() === "darwin") mod = "Cmd"; } catch (e) { /* 忽略 */ }
+    [[mod + "+T", "当前实例新标签"],
+     [mod + "+W", "关闭当前标签"],
+     [mod + "+Shift+[ / ]", "上一个 / 下一个标签"],
+     [mod + "+L", "聚焦地址栏"],
+     [mod + "+R", "重新加载当前标签"]
+    ].forEach(function (r) {
+      var line = el("div", "sc-row");
+      line.appendChild(el("code", "", r[0]));
+      line.appendChild(el("span", "", r[1]));
+      sc.appendChild(line);
+    });
+    var guideBtn = el("button", "", "查看使用引导");
+    guideBtn.onclick = showGuide;
+    sc.appendChild(guideBtn);
+    box.appendChild(sc);
     box.appendChild(row);
     wrap.appendChild(box);
   }
@@ -699,6 +721,57 @@
     if (p && p.view) { try { p.view.reload(); } catch (e) { /* 忽略 */ } }
   }
   window.mpAPI.onReloadActiveTab(function () { reloadActiveTab(); });
+
+  // #32 Q5：菜单快捷键执行（空态一律静默 no-op，与 Cmd+R 语义一致）。
+  window.mpAPI.onNewTab(function () { openTab(undefined, currentInstanceId); });
+  window.mpAPI.onCloseActiveTab(function () { if (activeTabId) closeTab(activeTabId); });
+  window.mpAPI.onSwitchTab(function (dir) {
+    var ids = tabs.filter(function (t) { return t.instanceId === currentInstanceId; })
+      .map(function (t) { return t.id; });
+    var i = ids.indexOf(activeTabId);
+    if (ids.length < 2 || i < 0) return;
+    activeTabId = ids[(i + dir + ids.length) % ids.length];
+    ensureTabLoaded(activeTabId);
+    render();
+  });
+  window.mpAPI.onFocusAddrbar(function () {
+    var p = activeTabId ? panes[activeTabId] : null;
+    if (p && p.input) { p.input.focus(); p.input.select(); }
+  });
+  window.mpAPI.onShowShortcuts(function () {
+    showSettings();
+    var sec = document.getElementById("shortcuts-sec");
+    if (sec && sec.scrollIntoView) sec.scrollIntoView();
+  });
+
+  // #32 Q1Q2：首次启动引导（模型+三步上手）；看过记 onboarded 不再自动弹。
+  function showGuide() {
+    var overlay = document.getElementById("guide-overlay");
+    if (!overlay) {
+      overlay = document.createElement("div");
+      overlay.id = "guide-overlay";
+      document.body.appendChild(overlay);
+    }
+    overlay.innerHTML = "";
+    var box = el("div", "guide");
+    box.appendChild(el("h3", "", "欢迎使用千岛"));
+    box.appendChild(el("p", "", "项目是分组，实例是隔离的会话空间：一个实例登一个账号，同站多账号互不串号；标签页归属实例。"));
+    var steps = el("ol", "");
+    ["在左栏空白处右键，新建项目（如“视频”）。",
+     "右键项目，新建实例，一个账号建一个实例。",
+     "在实例里打开网站并登录；右键实例可改名/改色/标注账号。"
+    ].forEach(function (s) { steps.appendChild(el("li", "", s)); });
+    box.appendChild(steps);
+    var start = el("button", "", "开始使用");
+    start.onclick = function () {
+      window.mpAPI.setSettings({ onboarded: true }).then(function (s) { settings = s; });
+      overlay.innerHTML = "";
+      overlay.hidden = true;
+    };
+    box.appendChild(start);
+    overlay.appendChild(box);
+    overlay.hidden = false;
+  }
 
   // #28 下载记录：事件进列表（Q7 四态，Q4 取消不打扰），失败 toast+重试（Q9），面板看全部（Q2C）。
   function saveDownloads() {
@@ -910,6 +983,11 @@
   // 启动：先拉存储建索引，再拉快照恢复标签（恢复期 render 不落盘）；下载记录并行拉起。
   window.mpAPI.listStore().then(function (store) {
     applyStore(store);
+    // #32 Q1：首启（未看过引导）自动弹引导页；顺带把设置读进内存。
+    window.mpAPI.getSettings().then(function (s) {
+      settings = s;
+      if (!s.onboarded) showGuide();
+    }, function () { /* 读不到设置就不弹，不挡启动 */ });
     window.mpAPI.getDownloadRecords().then(function (recs) {
       downloads = recs || [];
       dlLoaded = true;

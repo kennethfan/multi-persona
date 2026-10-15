@@ -64,6 +64,13 @@ export interface MpAPI {
   setTabsSnapshot(snap: TabsSnapshot): Promise<void>;
   /** Cmd+R：主进程应用菜单转发，界面层只重载当前活动标签（ADR-0011）。 */
   onReloadActiveTab(handler: () => void): void;
+  onNewTab(handler: () => void): void;
+  onCloseActiveTab(handler: () => void): void;
+  onSwitchTab(handler: (dir: 1 | -1) => void): void;
+  onFocusAddrbar(handler: () => void): void;
+  onShowShortcuts(handler: () => void): void;
+  /** 运行平台（#33：快捷键表按平台显示 Cmd/Ctrl）。 */
+  platform(): string;
   /** 写应用级设置（合并回填后落盘，返回生效值）。 */
   setSettings(patch: Partial<Settings>): Promise<Settings>;
   /** 下载记录事件（开始/完成/取消/中断，#28）。 */
@@ -134,6 +141,22 @@ contextBridge.exposeInMainWorld("mpAPI", {
   onReloadActiveTab: (handler: () => void): void => {
     ipcRenderer.on("mp:reload-active-tab", () => handler());
   },
+  onNewTab: (handler: () => void): void => {
+    ipcRenderer.on("mp:new-tab", () => handler());
+  },
+  onCloseActiveTab: (handler: () => void): void => {
+    ipcRenderer.on("mp:close-active-tab", () => handler());
+  },
+  onSwitchTab: (handler: (dir: 1 | -1) => void): void => {
+    ipcRenderer.on("mp:switch-tab", (_e, req: { dir: 1 | -1 }) => handler(req.dir));
+  },
+  onFocusAddrbar: (handler: () => void): void => {
+    ipcRenderer.on("mp:focus-addrbar", () => handler());
+  },
+  onShowShortcuts: (handler: () => void): void => {
+    ipcRenderer.on("mp:show-shortcuts", () => handler());
+  },
+  platform: (): string => process.platform,
   setSettings: (patch: Partial<Settings>): Promise<Settings> =>
     ipcRenderer.invoke("settings:set", patch),
   getTabsSnapshot: (): Promise<TabsSnapshot> => ipcRenderer.invoke("tabs:get"),

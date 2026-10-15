@@ -11,6 +11,8 @@ export interface Settings {
   conflictNotify: boolean;
   /** 应用默认下载目录；空字串=跟随系统默认下载目录。 */
   downloadDir: string;
+  /** 看过引导页后不再自动弹（#32 Q7）。 */
+  onboarded: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -18,6 +20,7 @@ export const DEFAULT_SETTINGS: Settings = {
   popupBehavior: "modal",
   conflictNotify: true,
   downloadDir: "",
+  onboarded: false,
 };
 
 /** 缺字段回填默认值，非法值回退默认（老版本 settings.json 直接可用）。 */
@@ -27,6 +30,7 @@ export function withDefaults(raw: Partial<Settings>): Settings {
     popupBehavior: raw.popupBehavior === "tab" ? "tab" : "modal",
     conflictNotify: raw.conflictNotify === false ? false : true,
     downloadDir: typeof raw.downloadDir === "string" ? raw.downloadDir : "",
+    onboarded: raw.onboarded === true,
   };
 }
 

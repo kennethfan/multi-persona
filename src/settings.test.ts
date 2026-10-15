@@ -16,12 +16,14 @@ describe("withDefaults", () => {
         popupBehavior: "tab",
         conflictNotify: false,
         downloadDir: "/tmp/dl",
+        onboarded: true,
       }),
     ).toEqual({
       newTabDefault: "ask",
       popupBehavior: "tab",
       conflictNotify: false,
       downloadDir: "/tmp/dl",
+      onboarded: true,
     });
   });
   it("非法值回退默认", () => {
@@ -38,6 +40,12 @@ describe("withDefaults", () => {
     expect(withDefaults({ downloadDir: 42 } as unknown as Partial<Settings>).downloadDir).toBe(
       "",
     );
+  });
+  it("onboarded 缺字段回 false（老文件直接可用），非布尔回默认", () => {
+    expect(withDefaults({}).onboarded).toBe(false);
+    expect(
+      withDefaults({ onboarded: "yes" } as unknown as Partial<Settings>).onboarded,
+    ).toBe(false);
   });
 });
 

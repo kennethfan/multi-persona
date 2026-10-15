@@ -31,6 +31,8 @@ import type { Settings } from "./settings";
 import { createWindowOptions } from "./window-config";
 import { loadTabsSnapshot, resolveTabsDbPath, saveTabsSnapshot } from "./tabs-db";
 import type { TabsSnapshot } from "./tabs-db";
+import { loadBookmarks, resolveBookmarksDbPath, saveBookmarks } from "./bookmarks-db";
+import type { Bookmark } from "./bookmarks-db";
 import { loadDownloadRecords, resolveDownloadsDbPath, saveDownloadRecords } from "./downloads-db";
 import type { DownloadRecord } from "./downloads-db";
 
@@ -319,6 +321,13 @@ void app.whenReady().then(() => {
   ipcMain.handle("tabs:get", () => loadTabsSnapshot(tabsDbPath));
   ipcMain.handle("tabs:set", (_event, snap: TabsSnapshot) => {
     saveTabsSnapshot(tabsDbPath, snap);
+  });
+
+  // 书签：renderer 变化即推，启动时拉（#36，sqlite 全量落盘，损坏静默空列表）。
+  const bookmarksDbPath = resolveBookmarksDbPath(userData);
+  ipcMain.handle("bookmarks:get", () => loadBookmarks(bookmarksDbPath));
+  ipcMain.handle("bookmarks:set", (_event, marks: Bookmark[]) => {
+    saveBookmarks(bookmarksDbPath, marks);
   });
 
   // #28：下载记录全量落盘（Q10A）；成功条目“打开所在文件夹”走 shell（Q8）。

@@ -3,6 +3,7 @@ import type { Store } from "./project-store";
 import type { Settings } from "./settings";
 import type { TabsSnapshot } from "./tabs-db";
 import type { DownloadRecord } from "./downloads-db";
+import type { Bookmark } from "./bookmarks-db";
 
 /** 站内新窗口请求（主进程经 setWindowOpenHandler 拦截后转发）。 */
 export interface WindowOpenRequest {
@@ -79,6 +80,10 @@ export interface MpAPI {
   getDownloadRecords(): Promise<DownloadRecord[]>;
   /** 写下载记录（全量覆盖；失败静默忽略）。 */
   setDownloadRecords(recs: DownloadRecord[]): Promise<void>;
+  /** 读书签（损坏返回空数组，界面层静默空列表，#36）。 */
+  getBookmarks(): Promise<Bookmark[]>;
+  /** 写书签（全量覆盖；失败静默忽略，#36）。 */
+  setBookmarks(marks: Bookmark[]): Promise<void>;
   /** 在文件管理器中定位已下载文件（Q8 成功条目动作）。 */
   showInFolder(savePath: string): Promise<void>;
   /** 直接打开所在目录（P2A 快速跳转到目录）。 */
@@ -167,6 +172,9 @@ contextBridge.exposeInMainWorld("mpAPI", {
   getDownloadRecords: (): Promise<DownloadRecord[]> => ipcRenderer.invoke("downloads:get"),
   setDownloadRecords: (recs: DownloadRecord[]): Promise<void> =>
     ipcRenderer.invoke("downloads:set", recs),
+  getBookmarks: (): Promise<Bookmark[]> => ipcRenderer.invoke("bookmarks:get"),
+  setBookmarks: (marks: Bookmark[]): Promise<void> =>
+    ipcRenderer.invoke("bookmarks:set", marks),
   showInFolder: (savePath: string): Promise<void> =>
     ipcRenderer.invoke("downloads:show-in-folder", savePath),
   openDir: (savePath: string): Promise<void> =>

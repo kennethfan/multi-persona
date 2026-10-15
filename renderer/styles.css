@@ -47,6 +47,29 @@ input, select { font-family: var(--font); }
   font-size: 11px; color: var(--text-3);
   margin: 2px 6px 4px; font-weight: 600; letter-spacing: 0.06em;
 }
+/* #35：侧栏头（标题 + 收起按钮）与拖拽分隔条；收起时侧栏/分隔条整体隐藏。 */
+#side-head { display: flex; align-items: center; justify-content: space-between; }
+#side-head h2 { margin: 2px 0 4px 6px; }
+#side-collapse {
+  border: none; background: transparent; color: var(--text-3);
+  font-size: 14px; padding: 2px 6px; border-radius: var(--radius);
+}
+#side-collapse:hover { background: #eceff3; color: var(--text); }
+#side-grip {
+  width: 5px; flex: none; cursor: ew-resize;
+  background: transparent; position: relative;
+}
+#side-grip:hover { background: var(--accent); }
+/* 热区隐形加宽到约 13px（视觉仍是 5px，实例附近好抓且不易脱靶）。 */
+#side-grip::after {
+  content: ""; position: absolute; top: 0; bottom: 0; left: -4px; right: -4px;
+}
+/* 拖动期禁文本选中、全局横向光标，防划过实例行时的选中重绘卡顿。 */
+body.side-dragging, body.side-dragging * { user-select: none !important; cursor: ew-resize !important; }
+/* 拖动期全窗透明罩：盖住 webview，鼠标事件留在 host，右拖不断流。 */
+#drag-shield { position: fixed; inset: 0; z-index: 9999; cursor: ew-resize; }
+#sidebar.sb-collapsed, #side-grip.sb-collapsed { display: none; }
+#sidebar-toggle { display: none; }
 .proj {
   display: flex; align-items: center; gap: 8px;
   padding: 7px 9px; border-radius: var(--radius);
@@ -279,6 +302,30 @@ webview { flex: 1; }
 .dl-fill { height: 100%; background: var(--accent); border-radius: 3px; }
 .dl-acts { display: flex; gap: 8px; flex-shrink: 0; }
 .dl-hint { font-size: 12px; color: var(--text-2); }
+
+/* ---- 书签（#36）：侧栏书签区 + 地址栏 ⭐ ---- */
+.bm-star { flex-shrink: 0; }
+.bm-star:disabled { opacity: 0.35; cursor: default; }
+#bm-sec { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 8px; }
+#bm-sec .bm-head { cursor: pointer; user-select: none; }
+#bm-sec.bm-collapsed .bm-row, #bm-sec.bm-collapsed .bm-empty { display: none; }
+.bm-head { font-size: 12px; font-weight: 600; color: var(--text-2); padding: 0 8px 4px; }
+.bm-empty { font-size: 12px; color: var(--text-2); padding: 0 8px 4px; }
+.bm-row { display: flex; align-items: center; gap: 6px; padding: 2px 4px; }
+.bm-main { flex: 1; min-width: 0; cursor: pointer; border-radius: var(--radius); padding: 4px; }
+.bm-main:hover { background: #eceff3; }
+.bm-title {
+  font-size: 13px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.bm-sub { font-size: 12px; color: var(--text-2); }
+.bm-del {
+  border: none; background: transparent; color: var(--text-2);
+  cursor: pointer; font-size: 14px; padding: 2px 6px; border-radius: var(--radius);
+  opacity: 0; flex-shrink: 0;
+}
+.bm-row:hover .bm-del { opacity: 1; }
+.bm-del:hover { background: #eceff3; color: var(--danger); }
 
 /* ---- 引导页与快捷键表 ---- */
 #guide-overlay {

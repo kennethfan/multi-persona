@@ -31,6 +31,9 @@
   var dlLoaded = false;
   var unseenFailed = 0;
   var dlPanelOpen = false;
+  // #36 书签：全量内存 + sqlite 落盘（bmLoaded 前不写，防空覆盖）。
+  var bookmarks = [];
+  var bmLoaded = false;
 
   var PALETTE = ["#3b82f6", "#22c55e", "#f59e0b", "#a855f7", "#ef4444", "#06b6d4", "#ec4899", "#6b7280"];
 
@@ -153,7 +156,12 @@
     // #26：重新加载按钮，与 Cmd+R 同语义（只重载活动标签）；点击不读/不提交输入框。
     var reloadBtn = el("button", "", "⟳");
     reloadBtn.title = "重新加载当前标签";
+    // #36 Q3Q5：收藏按钮；☆=未收藏，★=已收藏（再点取消）；空白页禁用（Q6）。
+    var starBtn = el("button", "bm-star", "☆");
+    starBtn.title = "收藏当前页";
+    starBtn.onclick = function () { toggleBookmark(tab.id); };
     bar.appendChild(input);
+    bar.appendChild(starBtn);
     bar.appendChild(reloadBtn);
     bar.appendChild(go);
     // defer=恢复期的空壳：先占位，首次可见时才设 src 真加载（ADR-0012 懒加载）。
@@ -169,13 +177,14 @@
       // 用户正在输入时不抢输入框，失焦后下次对齐。
       if (document.activeElement !== input) input.value = url === BLANK ? "" : url;
       renderTabbar();
+      refreshBookmarkStars();
     }
     view.addEventListener("did-navigate", function (e) { syncUrl(e.url); });
     view.addEventListener("did-navigate-in-page", function (e) { syncUrl(e.url); });
     pane.appendChild(bar);
     pane.appendChild(view);
     document.getElementById("views").insertBefore(pane, document.getElementById("modal-layer"));
-    panes[tab.id] = { pane: pane, view: view, input: input };
+    panes[tab.id] = { pane: pane, view: view, input: input, star: starBtn };
     function submit() {
       if (!input.value) return;
       var url = /^https?:\/\//i.test(input.value) ? input.value : "https://" + input.value;
@@ -235,6 +244,46 @@
         list.appendChild(item);
       });
     });
+    // #36 Q3：侧栏书签区（浏览+打开+删除）；归属实例已删的条目保留，打开时回退（Q4）。
+    // 跟进折叠：标题行点击收起/展开，状态进 settings 持久化（默认展开）。
+    var sec = el("div", "");
+    sec.id = "bm-sec";
+    var bmCollapsed = !!settings.bookmarksCollapsed;
+    if (bmCollapsed) sec.className = "bm-collapsed";
+    var bmHead = el("div", "bm-head", (bmCollapsed ? "▸ 书签" : "▾ 书签"));
+    bmHead.title = bmCollapsed ? "展开书签" : "收起书签";
+    bmHead.onclick = function () {
+      settings.bookmarksCollapsed = !settings.bookmarksCollapsed;
+      window.mpAPI.setSettings({ bookmarksCollapsed: settings.bookmarksCollapsed });
+      renderSidebar();
+    };
+    sec.appendChild(bmHead);
+    if (!bookmarks.length) {
+      sec.appendChild(el("div", "bm-empty", "暂无书签，点地址栏 ☆ 收藏当前页"));
+    }
+    bookmarks.forEach(function (b) {
+      var row = el("div", "bm-row");
+      var main = el("div", "bm-main");
+      main.appendChild(el("div", "bm-title", b.title || b.url));
+      var bc = instanceOf(b.instanceId);
+      main.appendChild(el("div", "bm-sub", bc ? bc.name : "未知实例"));
+      main.title = b.url;
+      main.onclick = (function (bm) { return function () { openBookmark(bm); }; })(b);
+      row.appendChild(main);
+      var del = el("button", "bm-del", "×");
+      del.title = "删除书签";
+      del.onclick = (function (key) {
+        return function () {
+          bookmarks = bookmarks.filter(function (x) { return x.key !== key; });
+          saveBookmarks();
+          renderSidebar();
+          refreshBookmarkStars();
+        };
+      })(b.key);
+      row.appendChild(del);
+      sec.appendChild(row);
+    });
+    list.appendChild(sec);
   }
 
   function renderTabbar() {
@@ -316,6 +365,7 @@
   function render() {
     renderSidebar();
     renderTabbar();
+    refreshBookmarkStars();
     layout();
     renderModals();
     saveTabs();
@@ -649,6 +699,73 @@
   document.getElementById("split-toggle").onclick = toggleSplit;
   document.getElementById("downloads-btn").onclick = showDownloadsPanel;
 
+  // #35：侧栏调宽与收起（Q1–Q6）：分隔条拖拽无级调宽（120–400，松手落盘），
+  // 收起全隐藏；双击分隔条切换收起/展开；宽窄与收起态都记 settings。
+  function clampSideWidth(w) { return Math.min(400, Math.max(120, Math.round(w))); }
+  function applySidebar() {
+    var bar = document.getElementById("sidebar");
+    var grip = document.getElementById("side-grip");
+    var toggle = document.getElementById("sidebar-toggle");
+    var collapsed = !!settings.sidebarCollapsed;
+    bar.style.width = clampSideWidth(settings.sidebarWidth || 148) + "px";
+    bar.classList.toggle("sb-collapsed", collapsed);
+    grip.classList.toggle("sb-collapsed", collapsed);
+    toggle.style.display = collapsed ? "inline-block" : "none";
+  }
+  function setSideCollapsed(collapsed) {
+    settings.sidebarCollapsed = !!collapsed;
+    applySidebar();
+    window.mpAPI.setSettings({ sidebarCollapsed: settings.sidebarCollapsed })
+      .then(function (s) { settings = s; }, function () { /* 落盘失败不影响当前展示 */ });
+  }
+  document.getElementById("side-collapse").onclick = function () { setSideCollapsed(true); };
+  document.getElementById("sidebar-toggle").onclick = function () { setSideCollapsed(false); };
+  (function () {
+    var grip = document.getElementById("side-grip");
+    grip.ondblclick = function () { setSideCollapsed(!settings.sidebarCollapsed); };
+    grip.onmousedown = function (e) {
+      e.preventDefault();
+      var startX = e.clientX;
+      var startW = clampSideWidth(settings.sidebarWidth || 148);
+      var pendingX = null;
+      var frame = 0;
+      document.body.classList.add("side-dragging");
+      // 全窗透明罩：光标划过 webview 时事件仍归 host，否则右拖进页面区就断流。
+      var shield = document.createElement("div");
+      shield.id = "drag-shield";
+      document.body.appendChild(shield);
+      function apply() {
+        frame = 0;
+        if (pendingX === null) return;
+        var w = clampSideWidth(startW + pendingX - startX);
+        settings.sidebarWidth = w;
+        document.getElementById("sidebar").style.width = w + "px";
+        pendingX = null;
+      }
+      function move(ev) {
+        pendingX = ev.clientX;
+        if (!frame) frame = requestAnimationFrame(apply);
+      }
+      function up() {
+        document.removeEventListener("mousemove", move);
+        document.removeEventListener("mouseup", up);
+        if (frame) { cancelAnimationFrame(frame); frame = 0; }
+        if (pendingX !== null) {
+          var w = clampSideWidth(startW + pendingX - startX);
+          settings.sidebarWidth = w;
+          document.getElementById("sidebar").style.width = w + "px";
+          pendingX = null;
+        }
+        document.body.classList.remove("side-dragging");
+        if (shield.parentNode) shield.parentNode.removeChild(shield);
+        window.mpAPI.setSettings({ sidebarWidth: settings.sidebarWidth })
+          .then(function (s) { settings = s; }, function () { /* 落盘失败不影响当前展示 */ });
+      }
+      document.addEventListener("mousemove", move);
+      document.addEventListener("mouseup", up);
+    };
+  })();
+
   window.mpAPI.onWindowOpen(function (req) {
     var instanceId = req.instanceId || currentInstanceId;
     // 弹窗行为设为“新标签”时，所有站内新窗口都进标签；否则只有链接进标签、window.open 进 modal。
@@ -977,15 +1094,76 @@
 
   window.mpAPI.onStoreChanged(function () {
   window.mpAPI.listStore().then(applyStore);
-  window.mpAPI.getSettings().then(function (s) { settings = s; });
+  window.mpAPI.getSettings().then(function (s) { settings = s; applySidebar(); });
+  });
+
+  // #36 书签：toggle/落盘/回显/打开（Q4–Q8）。
+  function saveBookmarks() {
+    if (!bmLoaded) return;
+    try {
+      var r = window.mpAPI.setBookmarks(bookmarks);
+      if (r && typeof r.catch === "function") r.catch(function () { /* 落盘失败不影响当前会话 */ });
+    } catch (e) { /* 忽略 */ }
+  }
+
+  function isBookmarked(url) {
+    if (!url || url === BLANK) return false;
+    for (var i = 0; i < bookmarks.length; i++) {
+      if (bookmarks[i].key === url) return true;
+    }
+    return false;
+  }
+
+  function refreshBookmarkStars() {
+    Object.keys(panes).forEach(function (id) {
+      var t = tabOf(id);
+      var p = panes[id];
+      if (!t || !p || !p.star) return;
+      var blank = !t.url || t.url === BLANK;
+      p.star.disabled = blank;
+      var marked = !blank && isBookmarked(t.url);
+      p.star.textContent = marked ? "★" : "☆";
+      p.star.title = marked ? "已收藏，点击取消" : "收藏当前页";
+    });
+  }
+
+  function toggleBookmark(tabId) {
+    var t = tabOf(tabId);
+    if (!t || !t.url || t.url === BLANK) return;
+    var idx = -1;
+    for (var i = 0; i < bookmarks.length; i++) {
+      if (bookmarks[i].key === t.url) { idx = i; break; }
+    }
+    if (idx >= 0) {
+      bookmarks.splice(idx, 1);
+    } else {
+      bookmarks.unshift({ key: t.url, url: t.url, title: t.title || t.url, instanceId: t.instanceId, time: Date.now() });
+    }
+    saveBookmarks();
+    renderSidebar();
+    refreshBookmarkStars();
+  }
+
+  // Q4：在归属实例新标签打开（登录态才对）；归属实例已删回退当前实例。
+  function openBookmark(bm) {
+    openTab(bm.url, instanceOf(bm.instanceId) ? bm.instanceId : currentInstanceId);
+  }
+
+  // #36：书签启动即拉（静默空列表）；失败则 bmLoaded 为 false，后续不落盘防空覆盖。
+  window.mpAPI.getBookmarks().then(function (marks) {
+    bookmarks = marks || [];
+    bmLoaded = true;
+    renderSidebar();
+    refreshBookmarkStars();
   });
 
   // 启动：先拉存储建索引，再拉快照恢复标签（恢复期 render 不落盘）；下载记录并行拉起。
   window.mpAPI.listStore().then(function (store) {
     applyStore(store);
-    // #32 Q1：首启（未看过引导）自动弹引导页；顺带把设置读进内存。
+    // #32 Q1：首启（未看过引导）自动弹引导页；顺带把设置读进内存（含 #35 侧栏宽窄）。
     window.mpAPI.getSettings().then(function (s) {
       settings = s;
+      applySidebar();
       if (!s.onboarded) showGuide();
     }, function () { /* 读不到设置就不弹，不挡启动 */ });
     window.mpAPI.getDownloadRecords().then(function (recs) {

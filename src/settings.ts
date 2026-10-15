@@ -13,6 +13,12 @@ export interface Settings {
   downloadDir: string;
   /** 看过引导页后不再自动弹（#32 Q7）。 */
   onboarded: boolean;
+  /** 左边栏宽度 px，钳制 120–400（#35 Q3，默认 148 与现状一致）。 */
+  sidebarWidth: number;
+  /** 左边栏收起状态（#35 Q5，与宽度同进 settings 持久化）。 */
+  sidebarCollapsed: boolean;
+  /** 书签区收起状态（#36 跟进折叠，默认展开）。 */
+  bookmarksCollapsed: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -21,16 +27,23 @@ export const DEFAULT_SETTINGS: Settings = {
   conflictNotify: true,
   downloadDir: "",
   onboarded: false,
+  sidebarWidth: 148,
+  sidebarCollapsed: false,
+  bookmarksCollapsed: false,
 };
 
 /** 缺字段回填默认值，非法值回退默认（老版本 settings.json 直接可用）。 */
 export function withDefaults(raw: Partial<Settings>): Settings {
+  const w = typeof raw.sidebarWidth === "number" ? Math.round(raw.sidebarWidth) : NaN;
   return {
     newTabDefault: raw.newTabDefault === "ask" ? "ask" : "current",
     popupBehavior: raw.popupBehavior === "tab" ? "tab" : "modal",
     conflictNotify: raw.conflictNotify === false ? false : true,
     downloadDir: typeof raw.downloadDir === "string" ? raw.downloadDir : "",
     onboarded: raw.onboarded === true,
+    sidebarWidth: Number.isFinite(w) ? Math.min(400, Math.max(120, w)) : 148,
+    sidebarCollapsed: raw.sidebarCollapsed === true,
+    bookmarksCollapsed: raw.bookmarksCollapsed === true,
   };
 }
 

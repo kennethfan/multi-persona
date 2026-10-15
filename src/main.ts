@@ -193,7 +193,14 @@ function buildAppMenu(): void {
       click: () => sendToFocused("mp:focus-addrbar"),
     },
     { type: "separator" },
-    { role: "toggleDevTools" },
+    // 0015：开活动标签 guest 的 DevTools（Q1/Q5/Q6）；Toggle 语义由渲染层执行。
+    {
+      label: "切换实例开发者工具",
+      accelerator: "CmdOrCtrl+Shift+I",
+      click: () => sendToFocused("mp:toggle-guest-devtools"),
+    },
+    // 0015 Q4：主窗口项只在开发环境出现，release 包去掉。
+    ...(!app.isPackaged ? [{ role: "toggleDevTools" } as const] : []),
   ];
   // #32 Q4：菜单帮助项直达设置页快捷键一节。
   const helpMenu: Electron.MenuItemConstructorOptions = {
@@ -258,6 +265,9 @@ function buildGuestMenuItem(
       };
     case "nav-reload":
       return { label: guestMenuLabel(cmd), click: () => guest.reload() };
+    case "inspect":
+      // 0015 Q8：Chrome 式定位到点击元素；DevTools 已开时只移动焦点。
+      return { label: guestMenuLabel(cmd), click: () => guest.inspectElement(ctx.x, ctx.y) };
   }
 }
 
@@ -302,12 +312,16 @@ function createMainWindow(deps: { storePath: string; getSettings: () => Settings
         srcURL: params.srcURL ?? "",
         isImage: params.mediaType === "image",
         hasSelection: (params.selectionText ?? "").trim() !== "",
+        x: params.x ?? 0,
+        y: params.y ?? 0,
       };
       const cmds = buildGuestMenuCommands(ctx);
       const navStart = cmds.indexOf("nav-back");
+      const inspectAt = cmds.indexOf("inspect");
       const items: Electron.MenuItemConstructorOptions[] = [];
       for (let i = 0; i < cmds.length; i++) {
         if (i === navStart && i > 0) items.push({ type: "separator" });
+        if (i === inspectAt && i > 0) items.push({ type: "separator" });
         items.push(buildGuestMenuItem(cmds[i], ctx, guest, win));
       }
       Menu.buildFromTemplate(items).popup({ window: win });

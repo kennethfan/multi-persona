@@ -67,6 +67,8 @@ export interface MpAPI {
   setTabsSnapshot(snap: TabsSnapshot): Promise<void>;
   /** Cmd+R：主进程应用菜单转发，界面层只重载当前活动标签（ADR-0011）。 */
   onReloadActiveTab(handler: () => void): void;
+  /** 切换实例开发者工具（0015：视图菜单/快捷键转发，渲染层对活动标签 guest 执行 Toggle）。 */
+  onToggleGuestDevTools(handler: () => void): void;
   onNewTab(handler: () => void): void;
   onCloseActiveTab(handler: () => void): void;
   onSwitchTab(handler: (dir: 1 | -1) => void): void;
@@ -149,6 +151,9 @@ contextBridge.exposeInMainWorld("mpAPI", {
   getSettings: (): Promise<Settings> => ipcRenderer.invoke("settings:get"),
   onReloadActiveTab: (handler: () => void): void => {
     ipcRenderer.on("mp:reload-active-tab", () => handler());
+  },
+  onToggleGuestDevTools: (handler: () => void): void => {
+    ipcRenderer.on("mp:toggle-guest-devtools", () => handler());
   },
   onNewTab: (handler: () => void): void => {
     ipcRenderer.on("mp:new-tab", () => handler());

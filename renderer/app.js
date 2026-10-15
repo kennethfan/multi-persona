@@ -750,7 +750,8 @@
      [mod + "+W", "关闭当前标签"],
      [mod + "+Shift+[ / ]", "上一个 / 下一个标签"],
      [mod + "+L", "聚焦地址栏"],
-     [mod + "+R", "重新加载当前标签"]
+     [mod + "+R", "重新加载当前标签"],
+     [mod + "+Shift+I", "切换实例开发者工具"]
     ].forEach(function (r) {
       var line = el("div", "sc-row");
       line.appendChild(el("code", "", r[0]));
@@ -909,6 +910,17 @@
     if (p && p.view) { try { p.view.reload(); } catch (e) { /* 忽略 */ } }
   }
   window.mpAPI.onReloadActiveTab(function () { reloadActiveTab(); });
+
+  // 0015：切换实例开发者工具（视图菜单/快捷键转发，只作用活动标签 guest；无活动标签静默 no-op）。
+  window.mpAPI.onToggleGuestDevTools(function () {
+    var t = activeTabId ? tabOf(activeTabId) : null;
+    var p = t ? panes[t.id] : null;
+    if (!p || !p.view) return;
+    try {
+      if (p.view.isDevToolsOpened()) p.view.closeDevTools();
+      else p.view.openDevTools();
+    } catch (e) { /* 忽略 */ }
+  });
 
   // #32 Q5：菜单快捷键执行（空态一律静默 no-op，与 Cmd+R 语义一致）。
   window.mpAPI.onNewTab(function () { openTab(undefined, currentInstanceId); });

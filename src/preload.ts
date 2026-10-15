@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { Store } from "./project-store";
 import type { Settings } from "./settings";
 import type { TabsSnapshot } from "./tabs-db";
+import type { DownloadRecord } from "./downloads-db";
 
 /** 站内新窗口请求（主进程经 setWindowOpenHandler 拦截后转发）。 */
 export interface WindowOpenRequest {
@@ -17,6 +18,8 @@ export interface MpAPI {
   /** 注册 webview 与实例的配对（webview did-attach 后上报 getWebContentsId）。 */
   registerWebview(webContentsId: number, instanceId: string): void;
   onWindowOpen(handler: (req: WindowOpenRequest) => void): void;
+  /** 页面区“在新标签打开链接”（#29，归属触发页实例）。 */
+  onGuestOpenTab(handler: (req: WindowOpenRequest) => void): void;
   /** 删实例：主进程先清该实例分区存储再删元数据。界面层必须先二次确认再调。 */
   removeInstance(instanceId: string): Promise<Store>;
   /** 只清某实例网络缓存（登录态保留）。返回被清分区名。 */
@@ -63,6 +66,16 @@ export interface MpAPI {
   onReloadActiveTab(handler: () => void): void;
   /** 写应用级设置（合并回填后落盘，返回生效值）。 */
   setSettings(patch: Partial<Settings>): Promise<Settings>;
+  /** 下载记录事件（开始/完成/取消/中断，#28）。 */
+  onDownloadEvent(handler: (rec: DownloadRecord) => void): void;
+  /** 读下载记录（损坏返回空数组，界面层静默空列表）。 */
+  getDownloadRecords(): Promise<DownloadRecord[]>;
+  /** 写下载记录（全量覆盖；失败静默忽略）。 */
+  setDownloadRecords(recs: DownloadRecord[]): Promise<void>;
+  /** 在文件管理器中定位已下载文件（Q8 成功条目动作）。 */
+  showInFolder(savePath: string): Promise<void>;
+  /** 直接打开所在目录（P2A 快速跳转到目录）。 */
+  openDir(savePath: string): Promise<void>;
 }
 
 contextBridge.exposeInMainWorld("mpAPI", {
@@ -72,6 +85,9 @@ contextBridge.exposeInMainWorld("mpAPI", {
   },
   onWindowOpen: (handler: (req: WindowOpenRequest) => void): void => {
     ipcRenderer.on("mp:window-open", (_e, req: WindowOpenRequest) => handler(req));
+  },
+  onGuestOpenTab: (handler: (req: WindowOpenRequest) => void): void => {
+    ipcRenderer.on("mp:guest-open-tab", (_e, req: WindowOpenRequest) => handler(req));
   },
   removeInstance: (instanceId: string): Promise<Store> =>
     ipcRenderer.invoke("store:remove-instance", instanceId),
@@ -122,4 +138,14 @@ contextBridge.exposeInMainWorld("mpAPI", {
     ipcRenderer.invoke("settings:set", patch),
   getTabsSnapshot: (): Promise<TabsSnapshot> => ipcRenderer.invoke("tabs:get"),
   setTabsSnapshot: (snap: TabsSnapshot): Promise<void> => ipcRenderer.invoke("tabs:set", snap),
+  onDownloadEvent: (handler: (rec: DownloadRecord) => void): void => {
+    ipcRenderer.on("mp:download-event", (_e, rec: DownloadRecord) => handler(rec));
+  },
+  getDownloadRecords: (): Promise<DownloadRecord[]> => ipcRenderer.invoke("downloads:get"),
+  setDownloadRecords: (recs: DownloadRecord[]): Promise<void> =>
+    ipcRenderer.invoke("downloads:set", recs),
+  showInFolder: (savePath: string): Promise<void> =>
+    ipcRenderer.invoke("downloads:show-in-folder", savePath),
+  openDir: (savePath: string): Promise<void> =>
+    ipcRenderer.invoke("downloads:open-dir", savePath),
 } satisfies MpAPI);

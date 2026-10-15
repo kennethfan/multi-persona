@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildMenuCommands, menuLabel } from "./menus";
+import { buildGuestMenuCommands, buildMenuCommands, guestMenuLabel, menuLabel } from "./menus";
 
 describe("buildMenuCommands", () => {
   it("项目节点：新建/改名/改色/删除，无标注", () => {
@@ -36,6 +36,56 @@ describe("menuLabel", () => {
       for (const cmd of buildMenuCommands(kind)) {
         expect(menuLabel(cmd, kind).length).toBeGreaterThan(0);
       }
+    }
+  });
+});
+
+describe("buildGuestMenuCommands", () => {
+  it("空白处：只有导航三件套", () => {
+    expect(
+      buildGuestMenuCommands({ linkURL: "", srcURL: "", isImage: false, hasSelection: false }),
+    ).toEqual(["nav-back", "nav-forward", "nav-reload"]);
+  });
+
+  it("链接上：链接组在前，导航组在后", () => {
+    expect(
+      buildGuestMenuCommands({
+        linkURL: "https://example.com",
+        srcURL: "",
+        isImage: false,
+        hasSelection: false,
+      }),
+    ).toEqual(["open-link-tab", "copy-link", "nav-back", "nav-forward", "nav-reload"]);
+  });
+
+  it("图片链接：链接组、图片组、导航组依次出现", () => {
+    expect(
+      buildGuestMenuCommands({
+        linkURL: "https://example.com",
+        srcURL: "https://example.com/a.png",
+        isImage: true,
+        hasSelection: false,
+      }),
+    ).toEqual([
+      "open-link-tab",
+      "copy-link",
+      "save-image",
+      "nav-back",
+      "nav-forward",
+      "nav-reload",
+    ]);
+  });
+
+  it("选中文字：复制夹在内容组与导航组之间", () => {
+    const cmds = buildGuestMenuCommands({
+      linkURL: "",
+      srcURL: "",
+      isImage: false,
+      hasSelection: true,
+    });
+    expect(cmds).toEqual(["copy-selection", "nav-back", "nav-forward", "nav-reload"]);
+    for (const cmd of cmds) {
+      expect(guestMenuLabel(cmd).length).toBeGreaterThan(0);
     }
   });
 });

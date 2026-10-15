@@ -26,6 +26,11 @@
   var restoring = true;
   var showingSettings = false;
   var settingsDraft = null;
+  // #28：下载记录（Q1-Q13，Chrome 式）：内存列表 + sqlite 全量落盘；启动拉起前不落盘。
+  var downloads = [];
+  var dlLoaded = false;
+  var unseenFailed = 0;
+  var dlPanelOpen = false;
 
   var PALETTE = ["#3b82f6", "#22c55e", "#f59e0b", "#a855f7", "#ef4444", "#06b6d4", "#ec4899", "#6b7280"];
 
@@ -620,6 +625,7 @@
   document.getElementById("settings-btn").onclick = showSettings;
   document.getElementById("new-tab").onclick = function () { openTab(); };
   document.getElementById("split-toggle").onclick = toggleSplit;
+  document.getElementById("downloads-btn").onclick = showDownloadsPanel;
 
   window.mpAPI.onWindowOpen(function (req) {
     var instanceId = req.instanceId || currentInstanceId;
@@ -631,6 +637,11 @@
     } else {
       openModal(req.url, instanceId, activeTabId);
     }
+  });
+
+  // #29 Q7：页面区“在新标签打开链接”归属触发页实例（显式传参，不弹归属询问）。
+  window.mpAPI.onGuestOpenTab(function (req) {
+    openTab(req.url, req.instanceId || currentInstanceId);
   });
 
   // 存储快照应用（含存储变更通知后的重拉）：重建索引，清掉已删实例的标签/modal。
@@ -689,14 +700,227 @@
   }
   window.mpAPI.onReloadActiveTab(function () { reloadActiveTab(); });
 
+  // #28 下载记录：事件进列表（Q7 四态，Q4 取消不打扰），失败 toast+重试（Q9），面板看全部（Q2C）。
+  function saveDownloads() {
+    if (!dlLoaded) return;
+    try {
+      var r = window.mpAPI.setDownloadRecords(downloads);
+      if (r && typeof r.catch === "function") r.catch(function () { /* 落盘失败不影响当前会话 */ });
+    } catch (e) { /* 忽略 */ }
+  }
+
+  function refreshDownloadsBtn() {
+    var btn = document.getElementById("downloads-btn");
+    if (!btn) return;
+    if (unseenFailed > 0) {
+      btn.textContent = "⤓ 下载 (" + unseenFailed + ")";
+      btn.classList.add("has-failed");
+      btn.title = unseenFailed + " 个下载失败，点击查看";
+    } else {
+      btn.textContent = "⤓ 下载";
+      btn.classList.remove("has-failed");
+      btn.title = "下载记录";
+    }
+  }
+
+  function dlStateText(state) {
+    if (state === "active") return "下载中";
+    if (state === "completed") return "已完成";
+    if (state === "cancelled") return "已取消";
+    return "下载失败";
+  }
+
+  // P1：MB 文字（总大小未知时降级用）。
+  function dlMB(n) {
+    return (Math.max(0, n || 0) / 1048576).toFixed(1) + " MB";
+  }
+
+  function showDownloadFailToast(rec) {
+    var layer = document.getElementById("toast-layer");
+    if (!layer) {
+      layer = document.createElement("div");
+      layer.id = "toast-layer";
+      document.body.appendChild(layer);
+    }
+    var node = document.createElement("div");
+    node.className = "toast fail";
+    var span = document.createElement("span");
+    span.textContent = "下载失败：" + rec.filename;
+    node.appendChild(span);
+    var btn = document.createElement("button");
+    btn.textContent = "重试";
+    btn.onclick = function () { retryDownload(rec.key); node.remove(); };
+    node.appendChild(btn);
+    layer.appendChild(node);
+    // Q9 普通 toast：带按钮需留点击时间，8 秒后只清自己（普通文本 toast 仍走 2 秒整层清）。
+    setTimeout(function () { node.remove(); }, 8000);
+  }
+
+  function upsertDownload(rec) {
+    var found = null;
+    for (var i = 0; i < downloads.length; i++) {
+      if (downloads[i].key === rec.key) { found = downloads[i]; break; }
+    }
+    if (found) {
+      found.state = rec.state;
+      // P1：进度只在 active 事件上带，done 事件不带则保留上次值。
+      if (typeof rec.receivedBytes === "number") found.receivedBytes = rec.receivedBytes;
+      if (typeof rec.totalBytes === "number") found.totalBytes = rec.totalBytes;
+    }
+    else { downloads.unshift(rec); }
+    if (rec.state === "interrupted") {
+      unseenFailed += 1;
+      showDownloadFailToast(rec);
+    }
+    saveDownloads();
+    refreshDownloadsBtn();
+    if (dlPanelOpen) renderDownloadsPanel();
+  }
+  window.mpAPI.onDownloadEvent(upsertDownload);
+
+  // Q4/Q12：重试=从原 URL 重新发起（无续传）；同实例分区优先（登录态才对），无则回退活动标签。
+  function retryDownload(key) {
+    var rec = null;
+    for (var i = 0; i < downloads.length; i++) {
+      if (downloads[i].key === key) { rec = downloads[i]; break; }
+    }
+    if (!rec || !rec.url) { showToast("该记录无可用的下载链接"); return; }
+    var view = null;
+    var ids = Object.keys(panes);
+    var i;
+    if (activeTabId && panes[activeTabId] && tabOf(activeTabId) &&
+        tabOf(activeTabId).instanceId === rec.instanceId) {
+      view = panes[activeTabId].view;
+    } else {
+      for (i = 0; i < ids.length; i++) {
+        var t = tabOf(ids[i]);
+        if (t && t.instanceId === rec.instanceId && panes[ids[i]].view) {
+          view = panes[ids[i]].view;
+          break;
+        }
+      }
+      if (!view && activeTabId && panes[activeTabId]) view = panes[activeTabId].view;
+    }
+    if (!view) { showToast("请先打开一个标签页再重试"); return; }
+    try { view.downloadURL(rec.url); } catch (e) { showToast("重试发起失败"); }
+  }
+
+  function hideDownloadsPanel() {
+    dlPanelOpen = false;
+    var overlay = document.getElementById("overlay");
+    overlay.hidden = true;
+    overlay.innerHTML = "";
+    overlay.onclick = null;
+  }
+
+  function renderDownloadsPanel() {
+    var list = document.getElementById("dl-list");
+    if (!list) return;
+    list.innerHTML = "";
+    if (!downloads.length) {
+      list.appendChild(el("div", "dl-empty", "暂无下载记录"));
+      return;
+    }
+    downloads.forEach(function (d) {
+      var item = el("div", "dl-item");
+      var main = el("div", "dl-main");
+      var name = el("div", "dl-name", d.filename);
+      name.title = d.savePath;
+      main.appendChild(name);
+      var c = instanceOf(d.instanceId);
+      main.appendChild(el("div", "dl-sub",
+        (c ? c.name : "未知实例") + " · " + dlStateText(d.state) + " · " +
+        new Date(d.time).toLocaleString()));
+      // P1：进行中给精确进度条，总大小未知时降级为“已下 x MB”文字。
+      if (d.state === "active") {
+        if (d.totalBytes > 0) {
+          var pct = Math.min(100, Math.floor((d.receivedBytes || 0) / d.totalBytes * 100));
+          var bar = el("div", "dl-bar");
+          var fill = el("div", "dl-fill");
+          fill.style.width = pct + "%";
+          bar.appendChild(fill);
+          bar.title = dlMB(d.receivedBytes) + " / " + dlMB(d.totalBytes);
+          main.appendChild(bar);
+          main.appendChild(el("div", "dl-sub", pct + "% · " + dlMB(d.receivedBytes) + " / " + dlMB(d.totalBytes)));
+        } else {
+          main.appendChild(el("div", "dl-sub", "已下 " + dlMB(d.receivedBytes)));
+        }
+      }
+      item.appendChild(main);
+      var acts = el("div", "dl-acts");
+      // P2A：每行直达所在目录（任意状态）；已完成保留原“打开文件夹”定位文件。
+      var od = el("button", "", "打开目录");
+      od.onclick = (function (p) {
+        return function () { window.mpAPI.openDir(p).catch(function () { /* 忽略 */ }); };
+      })(d.savePath);
+      acts.appendChild(od);
+      if (d.state === "interrupted" || d.state === "cancelled") {
+        var re = el("button", "", "重试");
+        re.onclick = (function (key) { return function () { retryDownload(key); }; })(d.key);
+        acts.appendChild(re);
+      }
+      if (d.state === "completed") {
+        var fo = el("button", "", "打开文件夹");
+        fo.onclick = (function (p) {
+          return function () { window.mpAPI.showInFolder(p).catch(function () { /* 忽略 */ }); };
+        })(d.savePath);
+        acts.appendChild(fo);
+      }
+      if (acts.childNodes.length) item.appendChild(acts);
+      list.appendChild(item);
+    });
+  }
+
+  // Q6B：顶层工具栏常驻入口；打开面板即视为已查看，红点清零。
+  function showDownloadsPanel() {
+    unseenFailed = 0;
+    refreshDownloadsBtn();
+    dlPanelOpen = true;
+    var overlay = document.getElementById("overlay");
+    overlay.innerHTML = "";
+    var box = el("div", "prompt dl-panel");
+    box.appendChild(el("h3", "", "下载记录"));
+    var list = el("div", "dl-list");
+    list.id = "dl-list";
+    box.appendChild(list);
+    box.appendChild(el("div", "dl-hint", "重试仍失败可能是链接过期，请回页面重新发起下载"));
+    var row = el("div", "row");
+    var clear = el("button", "", "清空已完成");
+    clear.onclick = function () {
+      downloads = downloads.filter(function (d) { return d.state !== "completed"; });
+      saveDownloads();
+      renderDownloadsPanel();
+    };
+    var close = el("button", "", "关闭");
+    close.onclick = hideDownloadsPanel;
+    row.appendChild(clear);
+    row.appendChild(close);
+    box.appendChild(row);
+    overlay.appendChild(box);
+    overlay.hidden = false;
+    overlay.onclick = function (e) { if (e.target === overlay) hideDownloadsPanel(); };
+    renderDownloadsPanel();
+  }
+
   window.mpAPI.onStoreChanged(function () {
   window.mpAPI.listStore().then(applyStore);
   window.mpAPI.getSettings().then(function (s) { settings = s; });
   });
 
-  // 启动：先拉存储建索引，再拉快照恢复标签（恢复期 render 不落盘）。
+  // 启动：先拉存储建索引，再拉快照恢复标签（恢复期 render 不落盘）；下载记录并行拉起。
   window.mpAPI.listStore().then(function (store) {
     applyStore(store);
+    window.mpAPI.getDownloadRecords().then(function (recs) {
+      downloads = recs || [];
+      dlLoaded = true;
+      // 下载活不过重启：上次未完成的 active 实为已中断，翻成失败态（可重试）。
+      var changed = false;
+      downloads.forEach(function (d) {
+        if (d.state === "active") { d.state = "interrupted"; changed = true; }
+      });
+      if (changed) saveDownloads();
+      refreshDownloadsBtn();
+    }, function () { dlLoaded = true; });
     return window.mpAPI.getTabsSnapshot();
   }).then(function (snap) {
     restoreTabs(snap);

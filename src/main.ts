@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, Notification, dialog, ipcMain, session } from "electron";
+import { app, BrowserWindow, Menu, Notification, clipboard, dialog, ipcMain, session, shell } from "electron";
 import type { DownloadItem } from "electron";
 import path from "node:path";
 import { decideDownloadPath } from "./downloads";
@@ -17,8 +17,8 @@ import {
   setInstanceDownloadDir,
   setInstanceLabel,
 } from "./projects";
-import { buildMenuCommands, menuLabel } from "./menus";
-import type { MenuCmd, TreeNodeKind } from "./menus";
+import { buildGuestMenuCommands, buildMenuCommands, guestMenuLabel, menuLabel } from "./menus";
+import type { GuestCmd, GuestContext, MenuCmd, TreeNodeKind } from "./menus";
 import { clearInstanceCache, partitionFor, wipeInstanceStorage } from "./sessions";
 import {
   DEFAULT_SETTINGS,
@@ -31,6 +31,8 @@ import type { Settings } from "./settings";
 import { createWindowOptions } from "./window-config";
 import { loadTabsSnapshot, resolveTabsDbPath, saveTabsSnapshot } from "./tabs-db";
 import type { TabsSnapshot } from "./tabs-db";
+import { loadDownloadRecords, resolveDownloadsDbPath, saveDownloadRecords } from "./downloads-db";
+import type { DownloadRecord } from "./downloads-db";
 
 /** guest webContents id → 所属实例 id（渲染进程在 webview did-attach 后上报）。 */
 const webviewInstances = new Map<number, string>();
@@ -52,6 +54,13 @@ function broadcastStoreChanged(): void {
 function broadcastToast(text: string): void {
   for (const w of BrowserWindow.getAllWindows()) {
     w.webContents.send("mp:toast", text);
+  }
+}
+
+/** #28：下载记录事件广播（开始/完成/取消/中断全量上报，界面层做列表+红点+失败 toast）。 */
+function broadcastDownloadEvent(record: DownloadRecord): void {
+  for (const w of BrowserWindow.getAllWindows()) {
+    w.webContents.send("mp:download-event", record);
   }
 }
 
@@ -86,8 +95,36 @@ function handleWillDownload(
     }).show();
   }
   item.setSavePath(savePath);
+  // #28：will-download 时即发 active（列表出现“下载中”）；done 全量上报——之前只处理
+  // completed，cancelled/interrupted 被吞是本次报障根因。重试 URL 此时捕获（Q10/Q12）。
+  const startedAt = Date.now();
+  const base = {
+    key: savePath,
+    url: item.getURL(),
+    filename: item.getFilename(),
+    savePath,
+    instanceId,
+    time: startedAt,
+  };
+  broadcastDownloadEvent({ ...base, state: "active" });
+  // P1：updated 高频，只 500ms 节流推一次进度（未知总大小时 totalBytes<=0，界面层降级文字）。
+  let lastPush = 0;
+  item.on("updated", () => {
+    const now = Date.now();
+    if (now - lastPush < 500) return;
+    lastPush = now;
+    broadcastDownloadEvent({
+      ...base,
+      state: "active",
+      receivedBytes: item.getReceivedBytes(),
+      totalBytes: item.getTotalBytes(),
+    });
+  });
   item.on("done", (_e, state) => {
     if (state === "completed") broadcastToast(`已下载：${item.getFilename()}`);
+    if (state === "completed" || state === "cancelled" || state === "interrupted") {
+      broadcastDownloadEvent({ ...base, state });
+    }
   });
 }
 
@@ -133,6 +170,47 @@ function buildAppMenu(): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
+/** #29 页面区右键单项：导航/复制/存图在触发页 guest 上直接执行，只有新标签打开回 renderer。 */
+function buildGuestMenuItem(
+  cmd: GuestCmd,
+  ctx: GuestContext,
+  guest: Electron.WebContents,
+  win: BrowserWindow,
+): Electron.MenuItemConstructorOptions {
+  switch (cmd) {
+    case "open-link-tab":
+      return {
+        label: guestMenuLabel(cmd),
+        click: () =>
+          win.webContents.send("mp:guest-open-tab", {
+            url: ctx.linkURL,
+            instanceId: webviewInstances.get(guest.id) ?? "",
+          }),
+      };
+    case "copy-link":
+      return { label: guestMenuLabel(cmd), click: () => clipboard.writeText(ctx.linkURL) };
+    case "save-image":
+      // 走同分区 will-download：自动落保存路径、进下载记录、可重试（Q8 白赚下载链）。
+      return { label: guestMenuLabel(cmd), click: () => guest.downloadURL(ctx.srcURL) };
+    case "copy-selection":
+      return { label: guestMenuLabel(cmd), click: () => guest.copy() };
+    case "nav-back":
+      return {
+        label: guestMenuLabel(cmd),
+        enabled: guest.canGoBack(),
+        click: () => guest.goBack(),
+      };
+    case "nav-forward":
+      return {
+        label: guestMenuLabel(cmd),
+        enabled: guest.canGoForward(),
+        click: () => guest.goForward(),
+      };
+    case "nav-reload":
+      return { label: guestMenuLabel(cmd), click: () => guest.reload() };
+  }
+}
+
 function createMainWindow(): BrowserWindow {  const win = new BrowserWindow(createWindowOptions());
   // 站内全部新窗口请求在此拦截：一律 deny 原生窗口，转界面层开应用内标签/modal。
   // 注意：<webview> 的 new-window 事件自 Electron 22 已移除，必须用 setWindowOpenHandler。
@@ -144,6 +222,24 @@ function createMainWindow(): BrowserWindow {  const win = new BrowserWindow(crea
         instanceId: webviewInstances.get(guest.id) ?? "",
       });
       return { action: "deny" };
+    });
+    // #29：页面区右键接管。导航类在触发页 guest 上直接执行（Q5，无 IPC 往返防切标签竞态）；
+    // 只有“在新标签打开”回 renderer（归属触发页实例，Q7）。
+    guest.on("context-menu", (_e, params) => {
+      const ctx: GuestContext = {
+        linkURL: params.linkURL ?? "",
+        srcURL: params.srcURL ?? "",
+        isImage: params.mediaType === "image",
+        hasSelection: (params.selectionText ?? "").trim() !== "",
+      };
+      const cmds = buildGuestMenuCommands(ctx);
+      const navStart = cmds.indexOf("nav-back");
+      const items: Electron.MenuItemConstructorOptions[] = [];
+      for (let i = 0; i < cmds.length; i++) {
+        if (i === navStart && i > 0) items.push({ type: "separator" });
+        items.push(buildGuestMenuItem(cmds[i], ctx, guest, win));
+      }
+      Menu.buildFromTemplate(items).popup({ window: win });
     });
   });
   void win.loadFile(path.join(__dirname, "..", "renderer", "index.html"));
@@ -177,6 +273,20 @@ void app.whenReady().then(() => {
   ipcMain.handle("tabs:get", () => loadTabsSnapshot(tabsDbPath));
   ipcMain.handle("tabs:set", (_event, snap: TabsSnapshot) => {
     saveTabsSnapshot(tabsDbPath, snap);
+  });
+
+  // #28：下载记录全量落盘（Q10A）；成功条目“打开所在文件夹”走 shell（Q8）。
+  const downloadsDbPath = resolveDownloadsDbPath(userData);
+  ipcMain.handle("downloads:get", () => loadDownloadRecords(downloadsDbPath));
+  ipcMain.handle("downloads:set", (_event, records: DownloadRecord[]) => {
+    saveDownloadRecords(downloadsDbPath, records);
+  });
+  ipcMain.handle("downloads:show-in-folder", (_event, savePath: string) => {
+    shell.showItemInFolder(savePath);
+  });
+  // P2A：直达所在目录（与 show-in-folder 定位文件不同，这个直接打开文件夹）。
+  ipcMain.handle("downloads:open-dir", (_event, savePath: string) => {
+    shell.openPath(path.dirname(savePath));
   });
 
   // renderer 只读存储；上报 webview 与实例的配对。
